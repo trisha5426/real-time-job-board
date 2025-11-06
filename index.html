@@ -1,0 +1,749 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Job Connect: Professional Networking and Job Portal MVP</title>
+    <!-- Load Tailwind CSS -->
+    <script src="https://cdn.tailwindcss.com"></script>
+    <style>
+        /* Custom styles for professional look and feel */
+        body {
+            font-family: 'Inter', sans-serif;
+            background-color: #f7f9fc; /* Light background */
+        }
+        .card {
+            box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.1), 0 2px 4px -2px rgba(0, 0, 0, 0.06);
+            transition: transform 0.2s;
+        }
+        .btn-primary {
+            background-color: #1e40af; /* Darker blue */
+            color: white;
+        }
+        .btn-primary:hover {
+            background-color: #1d4ed8; /* Lighter blue on hover */
+        }
+        /* Mobile-first: Ensure main content takes up full height */
+        #app-container {
+            min-height: 100vh;
+            display: flex;
+            flex-direction: column;
+        }
+    </style>
+    <script>
+        tailwind.config = {
+            theme: {
+                extend: {
+                    colors: {
+                        'primary-blue': '#1e40af',
+                        'secondary-gray': '#6b7280',
+                    }
+                }
+            }
+        }
+    </script>
+</head>
+<body class="bg-gray-50">
+
+    <div id="app-container" class="max-w-7xl mx-auto w-full">
+
+        <!-- Navigation Bar -->
+        <header id="navbar" class="bg-white shadow-lg sticky top-0 z-10 hidden">
+            <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
+                <div class="flex justify-between items-center h-16">
+                    <div class="flex items-center">
+                        <span class="text-2xl font-bold text-primary-blue cursor-pointer" onclick="navigateTo('dashboard')">JobConnect</span>
+                    </div>
+                    <div class="flex items-center space-x-2 sm:space-x-4 text-sm sm:text-base">
+                        <button onclick="navigateTo('jobs')" class="text-secondary-gray hover:text-primary-blue transition duration-150 p-2 rounded-lg hidden sm:inline">Job Listings</button>
+                        <button onclick="navigateTo('profile')" class="text-secondary-gray hover:text-primary-blue transition duration-150 p-2 rounded-lg hidden sm:inline">Profile</button>
+                        <button onclick="navigateTo('about')" class="text-secondary-gray hover:text-primary-blue transition duration-150 p-2 rounded-lg hidden sm:inline">About Us</button>
+                        <button onclick="navigateTo('contact')" class="text-secondary-gray hover:text-primary-blue transition duration-150 p-2 rounded-lg hidden sm:inline">Contact Us</button>
+
+                        <!-- Post Job Button -->
+                        <button onclick="navigateTo('postJob')" class="text-white bg-indigo-600 hover:bg-indigo-700 font-semibold py-2 px-3 sm:px-4 rounded-lg shadow transition duration-150 whitespace-nowrap text-sm">Post Job</button>
+
+                        <button onclick="handleSignOut()" class="text-red-500 hover:text-red-700 transition duration-150 p-2 rounded-lg border border-red-500 hover:border-red-700 text-sm">Sign Out</button>
+                    </div>
+                </div>
+            </div>
+        </header>
+
+        <!-- Main Content Area -->
+        <main id="content-area" class="flex-grow p-4 sm:p-8">
+            <!-- Views will be rendered here -->
+        </main>
+
+        <!-- Loading Spinner (Hidden by default) -->
+        <div id="loading-overlay" class="fixed inset-0 bg-gray-900 bg-opacity-70 z-50 flex items-center justify-center hidden">
+            <div class="animate-spin rounded-full h-12 w-12 border-4 border-t-4 border-t-primary-blue border-gray-200"></div>
+            <p class="ml-4 text-white text-lg">Loading...</p>
+        </div>
+
+        <!-- Apply Modal (Hidden by default) -->
+        <div id="apply-modal" class="fixed inset-0 bg-gray-900 bg-opacity-70 z-40 flex items-center justify-center hidden">
+            <div class="bg-white p-8 rounded-xl card max-w-lg w-full m-4">
+                <h3 id="modal-title" class="text-2xl font-semibold text-primary-blue mb-4">Confirm Application</h3>
+                <p id="apply-job-title" class="text-lg font-medium mb-4"></p>
+                <p id="apply-instruction" class="text-secondary-gray mb-6">Are you sure you want to apply for this position? We will submit your profile details and resume link.</p>
+                <div id="apply-message" class="text-green-600 font-semibold text-lg mb-4 hidden"></div>
+                <div class="flex justify-end space-x-3">
+                    <!-- Updated button text to "Close" when successful message is shown -->
+                    <button id="cancel-btn" onclick="hideApplyModal()" class="text-secondary-gray border border-gray-300 py-2 px-5 rounded-lg shadow-md hover:bg-gray-100 transition duration-150">Cancel</button>
+                    <button id="confirm-apply-btn" onclick="submitApplication()" class="btn-primary py-2 px-5 rounded-lg shadow-md hover:shadow-lg transition duration-150">Apply</button>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Firebase SDK Imports (MUST be type="module") -->
+    <script type="module">
+        import { initializeApp } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-app.js";
+        import { getAuth, signInAnonymously, signInWithCustomToken, onAuthStateChanged, signOut } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-auth.js";
+        import { getFirestore, collection, addDoc, onSnapshot, query, setLogLevel } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-firestore.js";
+
+        // Enable debug logging for Firestore
+        setLogLevel('Debug');
+
+        // Global Firebase Configuration (Mandatory Setup)
+        const appId = typeof __app_id !== 'undefined' ? __app_id : 'job-connect-app';
+        const firebaseConfig = typeof __firebase_config !== 'undefined' ? JSON.parse(__firebase_config) : {};
+        const initialAuthToken = typeof __initial_auth_token !== 'undefined' ? __initial_auth_token : null;
+
+        let app, db, auth;
+        window.userId = null;
+        let isLoggedIn = false;
+        let currentPage = 'login'; // Initial UI state
+        
+        // Global State for Jobs (updated by Firestore listener)
+        window.jobs = []; 
+        let currentJobFilter = { search: '', location: 'All' };
+        let currentJobToApply = null; // Store job details for the modal
+
+        // --- Utility Functions ---
+
+        const showLoading = (show) => {
+            document.getElementById('loading-overlay').classList.toggle('hidden', !show);
+        };
+
+        // --- Core App Setup and Authentication ---
+        async function setupFirebase() {
+            try {
+                showLoading(true);
+
+                if (Object.keys(firebaseConfig).length > 0) {
+                    app = initializeApp(firebaseConfig);
+                    auth = getAuth(app);
+                    db = getFirestore(app);
+
+                    await new Promise(resolve => {
+                        const unsubscribe = onAuthStateChanged(auth, async (user) => {
+                            if (user) {
+                                window.userId = user.uid;
+                                isLoggedIn = true;
+                                // Start listening to jobs once authenticated
+                                setupJobListener(); 
+                                setUIState('dashboard');
+                            } else {
+                                // Attempt sign in using custom token or anonymously
+                                try {
+                                    if (initialAuthToken) {
+                                        await signInWithCustomToken(auth, initialAuthToken);
+                                    } else {
+                                        await signInAnonymously(auth);
+                                    }
+                                } catch (error) {
+                                    console.error("Firebase Auth Error:", error);
+                                    setUIState('login');
+                                }
+                            }
+                            unsubscribe();
+                            resolve();
+                        });
+                    });
+                } else {
+                    console.warn("Firebase config not available. Running in UI simulation mode.");
+                    // Fallback simulated user ID if Firebase isn't available
+                    window.userId = "simulated-user-guest";
+                    setUIState('login');
+                }
+            } catch (error) {
+                console.error("Failed to initialize Firebase:", error);
+                setUIState('login');
+            } finally {
+                showLoading(false);
+            }
+        }
+
+        // --- Firestore Listeners ---
+
+        const setupJobListener = () => {
+            if (!db || !appId) return;
+
+            const jobsCollection = collection(db, "artifacts", appId, "public", "data", "jobs");
+            const q = query(jobsCollection); 
+
+            onSnapshot(q, (snapshot) => {
+                window.jobs = [];
+                snapshot.forEach((doc) => {
+                    // Add document ID and data to the global array
+                    window.jobs.push({ id: doc.id, ...doc.data() });
+                });
+                // Sort by timestamp (most recent first)
+                window.jobs.sort((a, b) => new Date(b.timestamp) - new Date(a.timestamp));
+                
+                // Re-render the job listings if the user is currently viewing them
+                if (currentPage === 'jobs') {
+                    renderJobs();
+                }
+                // Also update dashboard widgets
+                if (currentPage === 'dashboard') {
+                    renderDashboard();
+                }
+                console.log("Jobs updated from Firestore:", window.jobs.length);
+            }, (error) => {
+                console.error("Error listening to job collection:", error);
+                // Fallback to empty array if connection fails
+                window.jobs = [];
+                if (currentPage === 'jobs') {
+                    renderJobs();
+                }
+            });
+        };
+
+
+        // --- UI Rendering Functions ---
+
+        const renderLogin = () => {
+            document.getElementById('navbar').classList.add('hidden');
+            document.getElementById('content-area').innerHTML = `
+                <div class="flex flex-col items-center justify-center min-h-[calc(100vh-64px)] p-4">
+                    <div class="bg-white p-8 sm:p-10 rounded-xl card max-w-md w-full text-center">
+                        <svg xmlns="http://www.w3.org/2000/svg" class="h-10 w-10 mx-auto text-primary-blue" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M21 13.255A23.513 23.513 0 0112 15c-3.185 0-6.279-.661-9-1.745M16 16v1a2 2 0 002 2h4a2 2 0 002-2v-1M6 16v1a2 2 0 002 2h4a2 2 0 002-2v-1M6 6v1a2 2 0 002 2h4a2 2 0 002-2v-1M16 6v1a2 2 0 002 2h4a2 2 0 002-2v-1" />
+                        </svg>
+                        <h2 class="text-3xl font-extrabold text-gray-900 mt-4 mb-2">Welcome to JobConnect</h2>
+                        <p class="text-secondary-gray mb-8">The professional networking and job portal MVP.</p>
+
+                        <div class="space-y-4">
+                            <input id="email" type="email" value="user@example.com" placeholder="Email Address" class="w-full p-3 border border-gray-300 rounded-lg focus:ring-primary-blue focus:border-primary-blue" required>
+                            <input id="password" type="password" value="password" placeholder="Password" class="w-full p-3 border border-gray-300 rounded-lg focus:ring-primary-blue focus:border-primary-blue" required>
+                        </div>
+                        <button onclick="handleLogin()" class="mt-6 w-full btn-primary py-3 rounded-lg shadow-md hover:shadow-lg transition duration-150 font-semibold text-lg">
+                            Log In / Sign Up
+                        </button>
+                    </div>
+                </div>
+            `;
+        };
+
+        const renderDashboard = () => {
+            document.getElementById('navbar').classList.remove('hidden');
+            document.getElementById('content-area').innerHTML = `
+                <div class="p-4 sm:p-6 lg:p-8">
+                    <h1 class="text-3xl font-extrabold text-gray-900 mb-6">Dashboard Overview</h1>
+                    <p class="text-secondary-gray mb-8">Welcome back, Job Seeker! Your User ID (for collaboration) is: <span class="font-mono bg-gray-200 px-2 py-1 rounded-md text-sm">${window.userId || 'Not Authenticated'}</span></p>
+
+                    <div class="grid grid-cols-1 md:grid-cols-3 gap-6">
+                        <!-- Widget 1: Jobs Applied (Simulated) -->
+                        <div class="bg-white p-6 rounded-xl card border-l-4 border-primary-blue">
+                            <p class="text-sm text-secondary-gray">Jobs Applied (Simulated)</p>
+                            <p class="text-3xl font-bold text-gray-900 mt-1">42</p>
+                            <span class="text-sm text-green-600">↑ 1 New This Week</span>
+                        </div>
+
+                        <!-- Widget 2: Profile Completion -->
+                        <div class="bg-white p-6 rounded-xl card border-l-4 border-green-600 cursor-pointer hover:bg-gray-50" onclick="navigateTo('profile')">
+                            <p class="text-sm text-secondary-gray">Profile Completion</p>
+                            <p class="text-3xl font-bold text-gray-900 mt-1">75%</p>
+                            <span class="text-sm text-primary-blue">Click to complete!</span>
+                        </div>
+
+                        <!-- Widget 3: Open Jobs (Real-time from Firestore) -->
+                        <div class="bg-white p-6 rounded-xl card border-l-4 border-yellow-600 cursor-pointer hover:bg-gray-50" onclick="navigateTo('jobs')">
+                            <p class="text-sm text-secondary-gray">Total Open Jobs</p>
+                            <p class="text-3xl font-bold text-gray-900 mt-1">${window.jobs.length}</p>
+                            <span class="text-sm text-yellow-600">Click to explore!</span>
+                        </div>
+                    </div>
+
+                    <!-- Featured Jobs Section -->
+                    <div class="mt-10">
+                        <h2 class="text-2xl font-bold text-gray-900 mb-4">Featured Job</h2>
+                        <div class="bg-white p-6 rounded-xl card space-y-4">
+                            <!-- Show the most recent job listing from the list -->
+                            ${window.jobs.length > 0 ? `
+                                <div class="flex flex-col sm:flex-row justify-between items-start sm:items-center border-b pb-3">
+                                    <div>
+                                        <p class="font-semibold text-primary-blue">${window.jobs[0].title}</p>
+                                        <p class="text-sm text-secondary-gray">${window.jobs[0].company} | ${window.jobs[0].location}</p>
+                                    </div>
+                                    <button onclick="showApplyModal('${window.jobs[0].id}', '${window.jobs[0].title}')" class="mt-2 sm:mt-0 text-white bg-primary-blue hover:bg-blue-700 py-2 px-4 rounded-lg text-sm">View & Apply</button>
+                                </div>
+                            ` : '<p class="text-center text-secondary-gray">No featured jobs available. Post one now!</p>'}
+                            
+                        </div>
+                    </div>
+                </div>
+            `;
+        };
+
+        const renderProfile = () => {
+            document.getElementById('navbar').classList.remove('hidden');
+            document.getElementById('content-area').innerHTML = `
+                <div class="p-4 sm:p-6 lg:p-8">
+                    <h1 class="text-3xl font-extrabold text-gray-900 mb-6">Profile Management</h1>
+                    <p class="text-secondary-gray mb-8">Update your professional details and provide your resume link.</p>
+
+                    <div class="bg-white p-6 rounded-xl card">
+                        <form onsubmit="event.preventDefault(); saveProfile()">
+                            <div class="grid grid-cols-1 gap-6 md:grid-cols-2">
+                                <!-- Name Field -->
+                                <div>
+                                    <label for="p-name" class="block text-sm font-medium text-gray-700">Full Name</label>
+                                    <input type="text" id="p-name" value="Jane Doe" class="mt-1 w-full p-3 border border-gray-300 rounded-lg focus:ring-primary-blue focus:border-primary-blue" required>
+                                </div>
+                                <!-- Title Field -->
+                                <div>
+                                    <label for="p-title" class="block text-sm font-medium text-gray-700">Current Title</label>
+                                    <input type="text" id="p-title" value="Software Engineer" class="mt-1 w-full p-3 border border-gray-300 rounded-lg focus:ring-primary-blue focus:border-primary-blue" required>
+                                </div>
+                                <!-- Resume Link Field (NEW) -->
+                                <div class="md:col-span-2">
+                                    <label for="p-resume" class="block text-sm font-medium text-gray-700">Resume Link (Add Resume)</label>
+                                    <input type="url" id="p-resume" value="https://docs.google.com/my-resume" placeholder="e.g., Google Drive link or personal site link" class="mt-1 w-full p-3 border border-gray-300 rounded-lg focus:ring-primary-blue focus:border-primary-blue">
+                                    <p class="mt-1 text-xs text-secondary-gray">This link will be submitted when you click 'Apply Now'.</p>
+                                </div>
+                                <!-- Summary Field -->
+                                <div class="md:col-span-2">
+                                    <label for="p-summary" class="block text-sm font-medium text-gray-700">Professional Summary</label>
+                                    <textarea id="p-summary" rows="4" class="mt-1 w-full p-3 border border-gray-300 rounded-lg focus:ring-primary-blue focus:border-primary-blue" required>Dynamic and driven engineer with 5 years of experience in full-stack development. Seeking new challenges in Agile environments.</textarea>
+                                </div>
+                            </div>
+                            <div class="mt-8 flex justify-end">
+                                <button type="submit" class="btn-primary py-3 px-6 rounded-lg shadow-md hover:shadow-lg transition duration-150 font-semibold">
+                                    Save Profile
+                                </button>
+                            </div>
+                        </form>
+                    </div>
+                    <div id="save-message" class="mt-4 text-green-600 font-semibold hidden">Profile saved successfully!</div>
+                </div>
+            `;
+            // Temporary function for form submission success message
+            window.saveProfile = () => {
+                document.getElementById('save-message').classList.remove('hidden');
+                setTimeout(() => document.getElementById('save-message').classList.add('hidden'), 3000);
+            }
+        };
+
+        // Job Filtering Logic
+        const filterJobs = () => {
+            const searchText = (document.getElementById('search-input')?.value || '').toLowerCase();
+            const locationFilter = document.getElementById('location-filter')?.value || 'All';
+
+            currentJobFilter.search = searchText;
+            currentJobFilter.location = locationFilter;
+
+            const filtered = window.jobs.filter(job => {
+                const textMatch = job.title.toLowerCase().includes(searchText) || 
+                                  job.company.toLowerCase().includes(searchText) ||
+                                  job.description.toLowerCase().includes(searchText);
+                
+                const locationMatch = locationFilter === 'All' || 
+                                      job.location.toLowerCase().includes(locationFilter.toLowerCase());
+
+                return textMatch && locationMatch;
+            });
+            
+            // Re-render the job list with filtered data
+            renderJobCards(filtered);
+        };
+
+        const renderJobCards = (jobsToRender) => {
+            const jobCardsHTML = jobsToRender.map(job => `
+                <div class="bg-white p-6 rounded-xl card hover:shadow-xl transition duration-200 border-l-4 border-primary-blue">
+                    <h2 class="text-xl font-bold text-gray-900">${job.title}</h2>
+                    <p class="text-sm text-secondary-gray mt-1">${job.company} | ${job.location} | ${new Date(job.timestamp).toLocaleDateString()}</p>
+                    <p class="mt-4 text-gray-700 text-sm">${job.description.substring(0, 150)}${job.description.length > 150 ? '...' : ''}</p>
+                    <div class="mt-4 flex justify-between items-center">
+                        <span class="font-semibold text-green-600">${job.salary}</span>
+                        <button onclick="showApplyModal('${job.id}', '${job.title}')" class="text-white bg-green-600 hover:bg-green-700 py-2 px-4 rounded-lg text-sm">Apply Now</button>
+                    </div>
+                </div>
+            `).join('');
+
+            const resultsContainer = document.getElementById('job-results-container');
+            if (resultsContainer) {
+                document.getElementById('job-count-span').textContent = jobsToRender.length;
+                resultsContainer.innerHTML = jobCardsHTML || '<p class="text-center text-secondary-gray mt-10 md:col-span-2">No jobs matched your search criteria.</p>';
+            }
+        }
+
+        const renderJobs = () => {
+            document.getElementById('navbar').classList.remove('hidden');
+            document.getElementById('content-area').innerHTML = `
+                <div class="p-4 sm:p-6 lg:p-8">
+                    <h1 class="text-3xl font-extrabold text-gray-900 mb-6">Explore Job Listings</h1>
+                    <p class="text-secondary-gray mb-4">Browse high-impact opportunities tailored to your skills. There are currently <span id="job-count-span" class="font-bold text-primary-blue">${window.jobs.length}</span> open positions.</p>
+
+                    <!-- Search and Filter Bar (NEW) -->
+                    <div class="bg-white p-4 rounded-xl card mb-8 grid grid-cols-1 sm:grid-cols-3 gap-4">
+                        <div class="sm:col-span-2">
+                            <input type="text" id="search-input" oninput="filterJobs()" placeholder="Search by title, company, or keyword..." class="w-full p-3 border border-gray-300 rounded-lg focus:ring-primary-blue focus:border-primary-blue">
+                        </div>
+                        <div>
+                            <select id="location-filter" onchange="filterJobs()" class="w-full p-3 border border-gray-300 rounded-lg focus:ring-primary-blue focus:border-primary-blue">
+                                <option value="All">Filter by Location...</option>
+                                <option value="Remote">Remote</option>
+                                <option value="NY">New York, NY</option>
+                                <option value="CA">California</option>
+                                <option value="UK">London, UK</option>
+                            </select>
+                        </div>
+                    </div>
+
+                    <div id="job-results-container" class="grid grid-cols-1 md:grid-cols-2 gap-6">
+                        <!-- Job cards rendered here by renderJobCards() -->
+                    </div>
+                </div>
+            `;
+            // Initial render of job cards based on current (unfiltered) list
+            renderJobCards(window.jobs);
+            // Ensure filter is applied if we were just posting a job
+            filterJobs();
+        };
+
+        const renderPostJob = () => {
+            document.getElementById('navbar').classList.remove('hidden');
+            document.getElementById('content-area').innerHTML = `
+                <div class="p-4 sm:p-6 lg:p-8 max-w-3xl mx-auto">
+                    <h1 class="text-3xl font-extrabold text-gray-900 mb-6">Post a New Job Opportunity</h1>
+                    <p class="text-secondary-gray mb-8">Fill out the details below to publish your job listing (saved to Firestore).</p>
+
+                    <div class="bg-white p-6 rounded-xl card">
+                        <form onsubmit="event.preventDefault(); handleJobPost(event)">
+                            <div class="grid grid-cols-1 gap-6 md:grid-cols-2">
+                                <div>
+                                    <label for="job-title" class="block text-sm font-medium text-gray-700">Job Title</label>
+                                    <input type="text" id="job-title" placeholder="e.g., Senior Full-Stack Developer" class="mt-1 w-full p-3 border border-gray-300 rounded-lg focus:ring-primary-blue focus:border-primary-blue" required>
+                                </div>
+                                <div>
+                                    <label for="company-name" class="block text-sm font-medium text-gray-700">Company Name</label>
+                                    <input type="text" id="company-name" placeholder="e.g., Innovate Solutions Inc." class="mt-1 w-full p-3 border border-gray-300 rounded-lg focus:ring-primary-blue focus:border-primary-blue" required>
+                                </div>
+                                <div>
+                                    <label for="job-location" class="block text-sm font-medium text-gray-700">Location (City, State/Country)</label>
+                                    <input type="text" id="job-location" placeholder="e.g., Remote or New York, NY" class="mt-1 w-full p-3 border border-gray-300 rounded-lg focus:ring-primary-blue focus:border-primary-blue" required>
+                                </div>
+                                <div>
+                                    <label for="salary-range" class="block text-sm font-medium text-gray-700">Salary Range (Optional)</label>
+                                    <input type="text" id="salary-range" placeholder="e.g., $90,000 - $110,000" class="mt-1 w-full p-3 border border-gray-300 rounded-lg focus:ring-primary-blue focus:border-primary-blue">
+                                </div>
+                                <div class="md:col-span-2">
+                                    <label for="job-description" class="block text-sm font-medium text-gray-700">Job Description</label>
+                                    <textarea id="job-description" rows="8" placeholder="Enter a detailed description, including responsibilities and requirements." class="mt-1 w-full p-3 border border-gray-300 rounded-lg focus:ring-primary-blue focus:border-primary-blue" required></textarea>
+                                </div>
+                            </div>
+                            <div class="mt-8 flex justify-end items-center">
+                                 <div id="post-message" class="text-green-600 font-semibold mr-4 hidden">Job posted successfully!</div>
+                                 <button type="submit" class="text-white bg-indigo-600 hover:bg-indigo-700 py-3 px-6 rounded-lg shadow-md hover:shadow-lg transition duration-150 font-semibold">
+                                    Publish Job
+                                </button>
+                            </div>
+                        </form>
+                    </div>
+                </div>
+            `;
+        };
+        
+        // NEW: About Us Page
+        const renderAbout = () => {
+             document.getElementById('navbar').classList.remove('hidden');
+             document.getElementById('content-area').innerHTML = `
+                <div class="p-4 sm:p-6 lg:p-8 max-w-3xl mx-auto">
+                    <h1 class="text-3xl font-extrabold text-gray-900 mb-6 border-b pb-2">About JobConnect</h1>
+                    <div class="space-y-6 text-gray-700 bg-white p-6 rounded-xl card">
+                        <p><strong>JobConnect</strong> is an MVP platform designed to quickly prototype and demonstrate core features of a modern professional networking and job portal. Our mission is to bridge the gap between talented individuals and cutting-edge opportunities in a simple, fast, and responsive environment.</p>
+                        <p>We believe in building tools that are efficient and collaborative. This platform currently showcases essential functionality including user authentication, real-time job posting (using a Firebase backend), profile management, and a job search/filter system.</p>
+                        <h2 class="text-xl font-semibold text-primary-blue pt-4">Our Technology Stack (MVP)</h2>
+                        <ul class="list-disc pl-6 space-y-2">
+                            <li><strong>Frontend:</strong> HTML, JavaScript, and Tailwind CSS for a modern, responsive single-page application experience.</li>
+                            <li><strong>Backend/Database:</strong> Firebase Firestore for real-time, persistent, and secure data storage (Jobs and Applications).</li>
+                            <li><strong>Architecture:</strong> A single-file application structure for rapid development and deployment.</li>
+                        </ul>
+                    </div>
+                </div>
+            `;
+        };
+
+        // NEW: Contact Us Page
+        const renderContact = () => {
+            document.getElementById('navbar').classList.remove('hidden');
+            document.getElementById('content-area').innerHTML = `
+                <div class="p-4 sm:p-6 lg:p-8 max-w-3xl mx-auto">
+                    <h1 class="text-3xl font-extrabold text-gray-900 mb-6 border-b pb-2">Contact Us</h1>
+                    <div class="space-y-6 text-gray-700 bg-white p-6 rounded-xl card">
+                        <p>We'd love to hear from you! Since this is a prototype, here is our simulated contact information.</p>
+                        <div class="grid grid-cols-1 md:grid-cols-3 gap-4">
+                            <div class="p-4 bg-gray-50 rounded-lg">
+                                <p class="font-semibold text-primary-blue">Email</p>
+                                <p>support@jobconnect.mvp</p>
+                            </div>
+                            <div class="p-4 bg-gray-50 rounded-lg">
+                                <p class="font-semibold text-primary-blue">Phone</p>
+                                <p>(555) 123-4567</p>
+                            </div>
+                            <div class="p-4 bg-gray-50 rounded-lg">
+                                <p class="font-semibold text-primary-blue">Address</p>
+                                <p>123 Prototype Lane, Dev City</p>
+                            </div>
+                        </div>
+                        
+                        <form onsubmit="event.preventDefault(); showContactSubmitMessage(event)">
+                            <h2 class="text-xl font-semibold text-primary-blue pt-4 mb-4">Send a Message</h2>
+                            <input type="text" placeholder="Your Name" class="w-full p-3 border border-gray-300 rounded-lg mb-4" required>
+                            <input type="email" placeholder="Your Email" class="w-full p-3 border border-gray-300 rounded-lg mb-4" required>
+                            <textarea rows="4" placeholder="Your Message" class="w-full p-3 border border-gray-300 rounded-lg mb-4" required></textarea>
+                            <div class="flex justify-end items-center">
+                                <div id="contact-message" class="text-green-600 font-semibold mr-4 hidden">Message sent successfully!</div>
+                                <button type="submit" class="btn-primary py-3 px-6 rounded-lg shadow-md hover:shadow-lg transition duration-150 font-semibold">
+                                    Submit
+                                </button>
+                            </div>
+                        </form>
+                    </div>
+                </div>
+            `;
+            window.showContactSubmitMessage = (event) => {
+                document.getElementById('contact-message').classList.remove('hidden');
+                event.target.reset();
+                setTimeout(() => document.getElementById('contact-message').classList.add('hidden'), 3000);
+            }
+        };
+
+
+        // --- State Management and Navigation ---
+
+        const setUIState = (view) => {
+            currentPage = view;
+            switch (view) {
+                case 'login':
+                    renderLogin();
+                    break;
+                case 'dashboard':
+                    renderDashboard();
+                    break;
+                case 'profile':
+                    renderProfile();
+                    break;
+                case 'jobs':
+                    renderJobs();
+                    break;
+                case 'postJob':
+                    renderPostJob();
+                    break;
+                case 'about':
+                    renderAbout();
+                    break;
+                case 'contact':
+                    renderContact();
+                    break;
+                default:
+                    console.error("Unknown view state:", view);
+                    renderDashboard();
+            }
+        };
+
+        // Expose navigation globally for onclick events in HTML
+        window.navigateTo = (view) => {
+            if (isLoggedIn || view === 'login') {
+                setUIState(view);
+                console.log("Navigated to:", view, " | Is Logged In:", isLoggedIn);
+            } else {
+                setUIState('login');
+            }
+        };
+
+        // --- Auth Handlers ---
+
+        window.handleLogin = async () => {
+            showLoading(true);
+            await new Promise(r => setTimeout(r, 500)); // Simulate delay
+            
+            if (auth && !auth.currentUser) {
+                 // Rely on onAuthStateChanged to handle the sign-in if Firebase is configured
+                 try {
+                    await signInAnonymously(auth);
+                 } catch (error) {
+                    console.error("Simulated Sign In failed (Firebase not configured or auth error):", error);
+                    // Fallback to manual state update if real auth fails/unavailable
+                    isLoggedIn = true;
+                    window.userId = "simulated-user-" + Math.random().toString(36).substring(2, 9);
+                    setUIState('dashboard');
+                 }
+            } else if (!auth) {
+                 // UI Simulation Mode
+                isLoggedIn = true;
+                window.userId = "simulated-user-" + Math.random().toString(36).substring(2, 9);
+                setUIState('dashboard');
+            }
+            showLoading(false);
+        };
+
+        window.handleSignOut = async () => {
+            showLoading(true);
+            if (auth) {
+                try {
+                    await signOut(auth); // Use real sign out
+                } catch (error) {
+                    console.error("Sign out failed:", error);
+                }
+            }
+            isLoggedIn = false;
+            window.userId = null;
+            setUIState('login');
+            showLoading(false);
+        };
+
+        // --- Job Handlers (Backend Integrated) ---
+
+        // Job Post Handler (Now saves to Firestore)
+        window.handleJobPost = async (event) => {
+            const form = event.target;
+            const newJob = {
+                title: form.elements['job-title'].value,
+                company: form.elements['company-name'].value,
+                location: form.elements['job-location'].value,
+                salary: form.elements['salary-range'].value || 'Competitive',
+                description: form.elements['job-description'].value,
+                postedBy: window.userId,
+                timestamp: new Date().toISOString()
+            };
+            
+            showLoading(true);
+
+            if (db) {
+                try {
+                    // Public data collection path: /artifacts/{appId}/public/data/jobs
+                    await addDoc(collection(db, "artifacts", appId, "public", "data", "jobs"), newJob);
+                    console.log("Job posted successfully to Firestore.");
+                } catch (error) {
+                    console.error("Error posting job to Firestore:", error);
+                }
+            } else {
+                // UI Simulation fallback (optional, as listener should cover it)
+                console.log("Simulated job post due to no database connection.");
+            }
+
+            const messageElement = document.getElementById('post-message');
+            messageElement.classList.remove('hidden');
+            
+            // Navigate away after a short delay
+            setTimeout(() => {
+                showLoading(false);
+                messageElement.classList.add('hidden');
+                form.reset(); 
+                navigateTo('jobs'); 
+            }, 1000);
+        }
+
+        // Apply Handler (Now saves application record to Firestore)
+        window.submitApplication = async () => {
+            if (!currentJobToApply || !window.userId) {
+                console.error("Cannot apply: Missing job details or user ID.");
+                return;
+            }
+
+            const applyBtn = document.getElementById('confirm-apply-btn');
+            const cancelBtn = document.getElementById('cancel-btn');
+            const messageElement = document.getElementById('apply-message');
+            const instructionsElement = document.getElementById('apply-instruction');
+            const modalTitle = document.getElementById('modal-title');
+            
+            // Initial UI state change
+            applyBtn.disabled = true;
+            messageElement.textContent = "Processing application...";
+            messageElement.classList.remove('hidden');
+            instructionsElement.classList.add('hidden');
+
+            const applicationRecord = {
+                jobId: currentJobToApply.id,
+                jobTitle: currentJobToApply.title,
+                applicantId: window.userId,
+                resumeLink: document.getElementById('p-resume')?.value || 'Not provided in profile',
+                appliedAt: new Date().toISOString()
+            };
+
+            const successMessage = "Applied for the job, you will be notified."; // Requested message
+
+            if (db) {
+                 try {
+                    // Private data collection path: /artifacts/{appId}/users/{userId}/applications
+                    const path = ["artifacts", appId, "users", window.userId, "applications"];
+                    await addDoc(collection(db, ...path), applicationRecord);
+                    
+                    // Success UI update
+                    messageElement.textContent = successMessage; 
+                    messageElement.classList.remove('text-red-600');
+                    applyBtn.classList.add('hidden'); 
+                    cancelBtn.textContent = 'Close'; // Change button text
+                    modalTitle.textContent = 'Application Submitted';
+                    console.log("Application recorded in Firestore:", applicationRecord);
+                } catch (error) {
+                    // Error UI update
+                    messageElement.textContent = `Application failed: ${error.message}`;
+                    messageElement.classList.add('text-red-600');
+                    instructionsElement.classList.remove('hidden');
+                    applyBtn.disabled = false;
+                    cancelBtn.textContent = 'Cancel';
+                    console.error("Error submitting application:", error);
+                }
+            } else {
+                 // Simulation mode success UI update
+                 messageElement.textContent = successMessage; 
+                 applyBtn.classList.add('hidden'); 
+                 cancelBtn.textContent = 'Close';
+                 modalTitle.textContent = 'Application Submitted';
+            }
+
+            // Close modal after delay
+            setTimeout(() => {
+                hideApplyModal();
+                // Reset modal state for the next use
+                applyBtn.disabled = false;
+                applyBtn.classList.remove('hidden');
+                cancelBtn.textContent = 'Cancel';
+                instructionsElement.classList.remove('hidden');
+                modalTitle.textContent = 'Confirm Application';
+                messageElement.classList.remove('text-red-600');
+            }, 2500);
+        }
+
+
+        // --- Modal Handlers ---
+
+        window.showApplyModal = (jobId, jobTitle) => {
+            currentJobToApply = { id: jobId, title: jobTitle };
+            document.getElementById('apply-job-title').textContent = jobTitle;
+            document.getElementById('apply-modal').classList.remove('hidden');
+            document.getElementById('apply-message').classList.add('hidden');
+            document.getElementById('confirm-apply-btn').disabled = false;
+            document.getElementById('confirm-apply-btn').classList.remove('hidden');
+            document.getElementById('cancel-btn').textContent = 'Cancel';
+            document.getElementById('apply-instruction').classList.remove('hidden');
+            document.getElementById('modal-title').textContent = 'Confirm Application';
+
+        };
+
+        window.hideApplyModal = () => {
+            document.getElementById('apply-modal').classList.add('hidden');
+        };
+
+
+        // --- App Initialization ---
+        window.onload = setupFirebase;
+    </script>
+
+</body>
+</html>
