@@ -106,8 +106,6 @@
 
         // Global Firebase Configuration (Mandatory Setup)
         const appId = typeof __app_id !== 'undefined' ? __app_id : 'job-connect-app';
-        // NOTE: A functional Firebase config object is REQUIRED for this code to run with real database access.
-        // For local testing, it will run in "UI simulation mode".
         const firebaseConfig = typeof __firebase_config !== 'undefined' ? JSON.parse(__firebase_config) : {};
         const initialAuthToken = typeof __initial_auth_token !== 'undefined' ? __initial_auth_token : null;
 
@@ -119,13 +117,27 @@
         // Global State for Jobs and User Profile
         window.jobs = []; 
         window.userProfile = { name: '', title: '', resumeLink: '', summary: '' };
-        let currentJobFilter = { search: '', location: 'All' };
+        // ADDED: salaryRange filter state
+        let currentJobFilter = { search: '', location: 'All', salaryRange: 'All' }; 
         let currentJobToApply = null; // Store job details for the modal
 
         // --- Utility Functions ---
 
         const showLoading = (show) => {
             document.getElementById('loading-overlay').classList.toggle('hidden', !show);
+        };
+        
+        /**
+         * Parses a salary string (e.g., "$120K+", "$80K", "Negotiable") into a minimum annual salary in thousands (K).
+         * Used for numerical filtering.
+         * @param {string} salary
+         * @returns {number} Minimum salary in thousands (e.g., 120 for $120K)
+         */
+        const parseSalaryToMinK = (salary) => {
+            if (!salary || salary.toLowerCase() === 'negotiable') return 0;
+            // Matches $XXXK and captures XXX
+            const match = salary.match(/\$(\d+)K/i); 
+            return match ? parseInt(match[1], 10) : 0;
         };
 
         // --- Core App Setup and Authentication ---
@@ -149,12 +161,16 @@
                                 await fetchUserProfile();
                                 setUIState('dashboard');
                             } else {
-                                // Fallback to Anonymous Sign In for Demo if no token is provided
-                                try {
+                                // Attempt sign in with token or fallback to Anonymous Sign In
+                                if (initialAuthToken) {
+                                    try {
+                                        await signInWithCustomToken(auth, initialAuthToken);
+                                    } catch (error) {
+                                        console.error("Custom Token Sign In Failed:", error);
+                                        await signInAnonymously(auth);
+                                    }
+                                } else {
                                     await signInAnonymously(auth);
-                                } catch (error) {
-                                    console.error("Firebase Auth Error:", error);
-                                    setUIState('login');
                                 }
                             }
                             unsubscribe();
@@ -167,10 +183,12 @@
                     window.userId = "simulated-user-guest";
                     isLoggedIn = true; // Assume logged in for UI demo purposes
                     setUIState('dashboard');
+                    // UPDATED: Added a job for the 'Low' salary range
                     window.jobs = [
                         { id: 'job1', title: 'Senior Developer', company: 'Tech Corp', location: 'Remote', salary: '$120K+', description: 'Build scalable applications with React/Node.js. Must have 5+ years experience and be proficient in cloud technologies (AWS/Azure). Great benefits and flexible hours.', timestamp: Date.now() - 3600000 },
                         { id: 'job2', title: 'UX Designer', company: 'Design Studio', location: 'NY', salary: '$80K', description: 'Design user-friendly interfaces for a new mobile app. Experience with Figma is required. Must be able to conduct user interviews.', timestamp: Date.now() - 7200000 },
-                        { id: 'job3', title: 'Marketing Manager', company: 'Brand Innovators', location: 'London', salary: '$95K', description: 'Lead digital marketing campaigns and manage a small team. Focus on SEO/SEM and content strategy.', timestamp: Date.now() - 10800000 }
+                        { id: 'job3', title: 'Marketing Manager', company: 'Brand Innovators', location: 'London', salary: '$95K', description: 'Lead digital marketing campaigns and manage a small team. Focus on SEO/SEM and content strategy.', timestamp: Date.now() - 10800000 },
+                        { id: 'job4', title: 'Junior Analyst Internship', company: 'Startup Co', location: 'Remote', salary: '$50K', description: 'Entry-level position analyzing market trends and assisting senior staff.', timestamp: Date.now() - 12800000 }
                     ];
                 }
             } catch (error) {
@@ -193,16 +211,23 @@
                 // Try to sign in
                 await signInWithEmailAndPassword(auth, email, password);
             } catch (error) {
-                if (error.code === 'auth/user-not-found') {
+                if (error.code === 'auth/user-not-found' || error.code === 'auth/wrong-password') {
                     // If user not found, try to sign up/create the user
                     try {
                         await createUserWithEmailAndPassword(auth, email, password);
-                        alert("Account created successfully! You are now logged in.");
+                        // Using custom alert instead of window.alert()
+                        document.getElementById('login-error-message').textContent = "Account created successfully! You are now logged in.";
+                        document.getElementById('login-error-message').classList.remove('hidden', 'text-red-500');
+                        document.getElementById('login-error-message').classList.add('text-green-600');
                     } catch (signUpError) {
-                        alert(`Sign Up Failed: ${signUpError.message}`);
+                        document.getElementById('login-error-message').textContent = `Sign Up Failed: ${signUpError.message}`;
+                        document.getElementById('login-error-message').classList.remove('hidden');
+                        document.getElementById('login-error-message').classList.add('text-red-500');
                     }
                 } else {
-                    alert(`Login Failed: ${error.message}`);
+                    document.getElementById('login-error-message').textContent = `Login Failed: ${error.message}`;
+                    document.getElementById('login-error-message').classList.remove('hidden');
+                    document.getElementById('login-error-message').classList.add('text-red-500');
                 }
             } finally {
                 showLoading(false);
@@ -232,7 +257,8 @@
 
         const fetchUserProfile = async () => {
             if (!db || !window.userId) return;
-            const userDocRef = doc(db, "users", window.userId);
+            // Path: artifacts/{appId}/users/{userId}/profile/details
+            const userDocRef = doc(db, "artifacts", appId, "users", window.userId, "profile", "details");
             try {
                 const docSnap = await getDoc(userDocRef);
                 if (docSnap.exists()) {
@@ -260,12 +286,14 @@
 
             showLoading(true);
             try {
-                const userDocRef = doc(db, "users", window.userId);
+                // Path: artifacts/{appId}/users/{userId}/profile/details
+                const userDocRef = doc(db, "artifacts", appId, "users", window.userId, "profile", "details");
                 await setDoc(userDocRef, window.userProfile, { merge: true });
                 console.log("Profile saved to Firestore!");
             } catch (error) {
                 console.error("Error saving profile:", error);
-                alert("Failed to save profile to database.");
+                // Using console log instead of alert
+                console.log("Failed to save profile to database."); 
             } finally {
                 showLoading(false);
             }
@@ -283,7 +311,7 @@
             const description = document.getElementById('job-description').value;
 
             if (!title || !company || !location || !description) {
-                alert("Please fill in all required job fields.");
+                console.log("Please fill in all required job fields.");
                 return;
             }
 
@@ -316,7 +344,7 @@
                 event.target.reset();
             } catch (error) {
                 console.error("Error posting job:", error);
-                alert("Failed to post job to database.");
+                console.log("Failed to post job to database.");
             } finally {
                 showLoading(false);
             }
@@ -346,7 +374,7 @@
             
             if (!window.userProfile.resumeLink) {
                  // Simple validation
-                 alert("Please update your profile with a Resume Link before applying.");
+                 console.log("Please update your profile with a Resume Link before applying.");
                  hideApplyModal();
                  navigateTo('profile');
                  return;
@@ -444,6 +472,7 @@
                             <input id="email" type="email" value="user@example.com" placeholder="Email Address" class="w-full p-3 border border-gray-300 rounded-lg focus:ring-primary-blue focus:border-primary-blue" required>
                             <input id="password" type="password" value="password" placeholder="Password" class="w-full p-3 border border-gray-300 rounded-lg focus:ring-primary-blue focus:border-primary-blue" required>
                         </div>
+                        <p id="login-error-message" class="mt-4 text-sm text-red-500 hidden"></p>
                         <button onclick="handleLogin()" class="mt-6 w-full btn-primary py-3 rounded-lg shadow-md hover:shadow-lg transition duration-150 font-semibold text-lg">
                             Log In / Sign Up
                         </button>
@@ -543,12 +572,16 @@
             // Reset the state
             currentJobFilter.search = '';
             currentJobFilter.location = 'All';
+            currentJobFilter.salaryRange = 'All'; // Reset salary filter
 
             // Reset the UI inputs
             const searchInput = document.getElementById('search-input');
             const locationFilter = document.getElementById('location-filter');
+            const salaryFilter = document.getElementById('salary-filter');
+
             if (searchInput) searchInput.value = '';
             if (locationFilter) locationFilter.value = 'All';
+            if (salaryFilter) salaryFilter.value = 'All';
 
             // Trigger the main filter function to show all jobs
             filterJobs();
@@ -556,232 +589,305 @@
         window.clearJobFilters = clearJobFilters; // Expose to global scope for HTML onclick
 
 
-        // Job Filtering Logic
+        // Job Filtering Logic (UPDATED to include Salary)
         const filterJobs = () => {
             // Read current filter values (or use the state if UI elements don't exist yet)
             const searchInput = document.getElementById('search-input');
             const locationSelect = document.getElementById('location-filter');
+            const salarySelect = document.getElementById('salary-filter'); // NEW
 
             const searchText = (searchInput?.value || currentJobFilter.search).toLowerCase();
             const locationFilter = (locationSelect?.value || currentJobFilter.location);
+            const salaryFilter = (salarySelect?.value || currentJobFilter.salaryRange); // NEW
 
             currentJobFilter.search = searchText;
             currentJobFilter.location = locationFilter;
+            currentJobFilter.salaryRange = salaryFilter; // NEW
 
             const filtered = window.jobs.filter(job => {
-                // Ensure all job properties exist to prevent errors during toLowerCase()
+                // 1. Text Search Filter
                 const jobTitle = job.title?.toLowerCase() || '';
                 const jobCompany = job.company?.toLowerCase() || '';
                 const jobDescription = job.description?.toLowerCase() || '';
                 const jobLocation = job.location?.toLowerCase() || '';
 
                 const textMatch = jobTitle.includes(searchText) || 
-                                        jobCompany.includes(searchText) ||
-                                        jobDescription.includes(searchText);
-                
-                const locationMatch = locationFilter === 'All' || 
-                                            jobLocation.includes(locationFilter.toLowerCase());
+                                          jobCompany.includes(searchText) || 
+                                          jobDescription.includes(searchText);
 
-                return textMatch && locationMatch;
+                // 2. Location Filter
+                const locationMatch = locationFilter === 'All' || jobLocation.includes(locationFilter.toLowerCase());
+
+                // 3. Salary Range Filter (NEW)
+                const salaryFilterMatch = () => {
+                    if (salaryFilter === 'All') return true;
+                    const jobSalaryMinK = parseSalaryToMinK(job.salary);
+
+                    if (salaryFilter === 'Low') { // $0K - $69K
+                        return jobSalaryMinK >= 0 && jobSalaryMinK < 70;
+                    }
+                    if (salaryFilter === 'Mid') { // $70K - $99K
+                        return jobSalaryMinK >= 70 && jobSalaryMinK < 100;
+                    }
+                    if (salaryFilter === 'High') { // $100K+
+                        return jobSalaryMinK >= 100;
+                    }
+                    return true;
+                };
+
+                return textMatch && locationMatch && salaryFilterMatch();
             });
-            
-            // Re-render the job list with filtered data
-            renderJobCards(filtered);
+
+            // Re-render the list with filtered results
+            const jobListContainer = document.getElementById('job-list-container');
+            if (jobListContainer) {
+                jobListContainer.innerHTML = generateJobListingsHTML(filtered);
+            }
         };
-        window.filterJobs = filterJobs; // Expose to global scope for HTML events
+        window.filterJobs = filterJobs; // Expose to global scope for HTML onclick/onchange
 
-
-        const renderJobCards = (jobsToRender) => {
-            const jobCardsHTML = jobsToRender.map(job => `
-                <div class="bg-white p-6 rounded-xl card hover:shadow-xl transition duration-200 border-l-4 border-primary-blue">
-                    <h2 class="text-xl font-bold text-gray-900">${job.title}</h2>
-                    <p class="text-sm text-secondary-gray mt-1">${job.company} | ${job.location} | <span class="text-xs text-gray-500">${timeAgo(job.timestamp)}</span></p>
-                    <p class="mt-4 text-gray-700 text-sm">${job.description.substring(0, 150)}${job.description.length > 150 ? '...' : ''}</p>
-                    <div class="mt-4 flex justify-between items-center">
-                        <span class="font-semibold text-green-600">${job.salary}</span>
-                        <button onclick="showApplyModal('${job.id}', '${job.title}')" class="text-white bg-green-600 hover:bg-green-700 py-2 px-4 rounded-lg text-sm">Apply Now</button>
+        const generateJobListingsHTML = (jobArray) => {
+            if (jobArray.length === 0) {
+                return '<div class="text-center py-10 text-secondary-gray">No jobs match your current filters. Try broadening your search!</div>';
+            }
+            return jobArray.map(job => `
+                <div class="bg-white p-6 rounded-xl card hover:shadow-xl hover:translate-y-[-2px] flex flex-col justify-between" role="listitem">
+                    <div>
+                        <h3 class="text-xl font-bold text-gray-900 mb-2">${job.title}</h3>
+                        <p class="text-primary-blue font-semibold mb-2">${job.company}</p>
+                        <div class="flex items-center space-x-4 text-sm text-secondary-gray mb-4">
+                            <span class="flex items-center"><i class="fas fa-map-marker-alt mr-2"></i>${job.location}</span>
+                            <span class="flex items-center"><i class="fas fa-money-bill-wave mr-2"></i>${job.salary}</span>
+                        </div>
+                        <p class="text-gray-700 line-clamp-3 mb-4">${job.description}</p>
+                    </div>
+                    <div class="mt-4 flex justify-end">
+                        <button onclick="showApplyModal('${job.id}', '${job.title}')" class="btn-primary py-2 px-5 rounded-lg text-sm transition duration-150">
+                            Apply Now
+                        </button>
                     </div>
                 </div>
             `).join('');
-
-            const resultsContainer = document.getElementById('job-results-container');
-            if (resultsContainer) {
-                resultsContainer.innerHTML = jobCardsHTML.length > 0 ? jobCardsHTML : 
-                    `<div class="md:col-span-3 bg-white p-8 rounded-xl card text-center text-secondary-gray">No jobs match your current search criteria.</div>`;
-            }
-            const countElement = document.getElementById('job-count');
-            if(countElement) {
-                countElement.textContent = `${jobsToRender.length} Jobs Found`;
-            }
         };
 
-
-        const timeAgo = (timestamp) => {
-            if (!timestamp) return 'Time Unknown';
-            const seconds = Math.floor((Date.now() - timestamp) / 1000);
-            
-            let interval = seconds / 31536000;
-            if (interval > 1) return Math.floor(interval) + " years ago";
-            interval = seconds / 2592000;
-            if (interval > 1) return Math.floor(interval) + " months ago";
-            interval = seconds / 86400;
-            if (interval > 1) return Math.floor(interval) + " days ago";
-            interval = seconds / 3600;
-            if (interval > 1) return Math.floor(interval) + " hours ago";
-            interval = seconds / 60;
-            if (interval > 1) return Math.floor(interval) + " minutes ago";
-            return Math.floor(seconds) + " seconds ago";
-        }
-        
         const renderJobs = () => {
             document.getElementById('navbar').classList.remove('hidden');
-
-            // Collect all unique locations for the filter dropdown
-            const locations = [...new Set(window.jobs.map(job => job.location).filter(Boolean))].sort();
-            const locationOptions = locations.map(loc => 
-                `<option value="${loc}" ${currentJobFilter.location === loc ? 'selected' : ''}>${loc}</option>`
-            ).join('');
+            // Populate location options dynamically from existing jobs
+            const allLocations = [...new Set(window.jobs.map(j => j.location))];
+            const locationOptions = allLocations.map(loc => `<option value="${loc}" ${currentJobFilter.location === loc ? 'selected' : ''}>${loc}</option>`).join('');
 
             document.getElementById('content-area').innerHTML = `
                 <div class="p-4 sm:p-6 lg:p-8">
-                    <h1 class="text-3xl font-extrabold text-gray-900 mb-6">Explore Job Listings</h1>
-                    
-                    <div class="bg-white p-6 rounded-xl card mb-8">
-                        <div class="grid grid-cols-1 md:grid-cols-4 gap-4">
-                            <div class="relative md:col-span-2">
-                                <input type="text" id="search-input" onkeyup="filterJobs()" placeholder="Search by title, company, or description..." 
-                                    value="${currentJobFilter.search}"
-                                    class="w-full pl-10 pr-4 py-3 border border-gray-300 rounded-lg focus:ring-primary-blue focus:border-primary-blue">
-                                <i class="fas fa-search absolute left-3 top-1/2 transform -translate-y-1/2 text-secondary-gray"></i>
-                            </div>
+                    <h1 class="text-3xl font-extrabold text-gray-900 mb-6">Job Listings</h1>
+                    <p class="text-secondary-gray mb-8">Browse the latest job opportunities in the professional network.</p>
 
-                            <select id="location-filter" onchange="filterJobs()" 
-                                class="w-full p-3 border border-gray-300 rounded-lg focus:ring-primary-blue focus:border-primary-blue">
-                                <option value="All">All Locations</option>
+                    <!-- Filter Bar -->
+                    <div class="bg-white p-6 rounded-xl card mb-8 grid grid-cols-1 md:grid-cols-4 gap-4 items-end">
+                        <div class="md:col-span-2">
+                            <label for="search-input" class="block text-sm font-medium text-gray-700">Search Keywords (Title, Company, Description)</label>
+                            <input type="text" id="search-input" oninput="filterJobs()" value="${currentJobFilter.search}" placeholder="e.g., React, Manager, Remote" class="mt-1 w-full p-3 border border-gray-300 rounded-lg focus:ring-primary-blue focus:border-primary-blue">
+                        </div>
+                        
+                        <div>
+                            <label for="location-filter" class="block text-sm font-medium text-gray-700">Location</label>
+                            <select id="location-filter" onchange="filterJobs()" class="mt-1 w-full p-3 border border-gray-300 rounded-lg focus:ring-primary-blue focus:border-primary-blue bg-white">
+                                <option value="All" ${currentJobFilter.location === 'All' ? 'selected' : ''}>All Locations</option>
                                 ${locationOptions}
                             </select>
+                        </div>
+                        
+                        <!-- NEW SALARY FILTER -->
+                        <div>
+                            <label for="salary-filter" class="block text-sm font-medium text-gray-700">Salary Range</label>
+                            <select id="salary-filter" onchange="filterJobs()" class="mt-1 w-full p-3 border border-gray-300 rounded-lg focus:ring-primary-blue focus:border-primary-blue bg-white">
+                                <option value="All" ${currentJobFilter.salaryRange === 'All' ? 'selected' : ''}>Any Salary</option>
+                                <option value="Low" ${currentJobFilter.salaryRange === 'Low' ? 'selected' : ''}>$0K - $70K</option>
+                                <option value="Mid" ${currentJobFilter.salaryRange === 'Mid' ? 'selected' : ''}>$70K - $100K</option>
+                                <option value="High" ${currentJobFilter.salaryRange === 'High' ? 'selected' : ''}>$100K+</option>
+                            </select>
+                        </div>
 
-                            <button onclick="clearJobFilters()" class="w-full bg-gray-200 text-gray-700 hover:bg-gray-300 py-3 rounded-lg font-semibold transition duration-150">
-                                Clear Filters
+                        <!-- Clear Filter Button (Adjusted layout to fit new filter) -->
+                        <div class="md:col-span-4 mt-2">
+                             <button onclick="clearJobFilters()" class="text-sm text-secondary-gray hover:text-red-500 transition duration-150 p-2 rounded-lg border border-gray-300 hover:border-red-500 w-full md:w-auto">
+                                Clear All Filters
                             </button>
                         </div>
                     </div>
-                    
-                    <div class="flex justify-between items-center mb-4">
-                        <h2 id="job-count" class="text-xl font-bold text-gray-800">${window.jobs.length} Jobs Found</h2>
-                        <button onclick="navigateTo('postJob')" class="text-white bg-indigo-600 hover:bg-indigo-700 font-semibold py-2 px-3 rounded-lg shadow transition duration-150 text-sm">Post a New Job</button>
-                    </div>
 
-                    <div id="job-results-container" class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-                        </div>
+                    <!-- Job List -->
+                    <div id="job-list-container" class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6" role="list">
+                        <!-- Jobs will be rendered here via filterJobs() or direct initial call -->
+                    </div>
                 </div>
             `;
-            // Initial render of the cards based on current filter state
-            filterJobs(); 
+            // Apply current filters on initial render
+            filterJobs();
         };
 
         const renderPostJob = () => {
             document.getElementById('navbar').classList.remove('hidden');
             document.getElementById('content-area').innerHTML = `
                 <div class="p-4 sm:p-6 lg:p-8">
-                    <h1 class="text-3xl font-extrabold text-gray-900 mb-6">Post a New Job Opening</h1>
-                    <p class="text-secondary-gray mb-8">Fill out the details below to list your job on JobConnect.</p>
+                    <h1 class="text-3xl font-extrabold text-gray-900 mb-6">Post a New Job</h1>
+                    <p class="text-secondary-gray mb-8">Fill in the details for the open position at your company.</p>
 
-                    <div class="bg-white p-6 rounded-xl card">
+                    <div class="bg-white p-6 rounded-xl card max-w-3xl mx-auto">
                         <form onsubmit="handleJobPost(event)">
                             <div class="grid grid-cols-1 gap-6 md:grid-cols-2">
                                 <div>
                                     <label for="job-title" class="block text-sm font-medium text-gray-700">Job Title</label>
-                                    <input type="text" id="job-title" placeholder="e.g., Lead Frontend Engineer" class="mt-1 w-full p-3 border border-gray-300 rounded-lg focus:ring-primary-blue focus:border-primary-blue" required>
+                                    <input type="text" id="job-title" placeholder="e.g., Data Scientist" class="mt-1 w-full p-3 border border-gray-300 rounded-lg focus:ring-primary-blue focus:border-primary-blue" required>
                                 </div>
                                 <div>
                                     <label for="company-name" class="block text-sm font-medium text-gray-700">Company Name</label>
-                                    <input type="text" id="company-name" placeholder="e.g., Tech Solutions Inc." class="mt-1 w-full p-3 border border-gray-300 rounded-lg focus:ring-primary-blue focus:border-primary-blue" required>
+                                    <input type="text" id="company-name" placeholder="e.g., Acme Solutions" class="mt-1 w-full p-3 border border-gray-300 rounded-lg focus:ring-primary-blue focus:border-primary-blue" required>
                                 </div>
                                 <div>
                                     <label for="job-location" class="block text-sm font-medium text-gray-700">Location</label>
-                                    <input type="text" id="job-location" placeholder="e.g., Remote, Austin TX, London" class="mt-1 w-full p-3 border border-gray-300 rounded-lg focus:ring-primary-blue focus:border-primary-blue" required>
+                                    <input type="text" id="job-location" placeholder="e.g., Remote, London, NYC" class="mt-1 w-full p-3 border border-gray-300 rounded-lg focus:ring-primary-blue focus:border-primary-blue" required>
                                 </div>
                                 <div>
-                                    <label for="salary-range" class="block text-sm font-medium text-gray-700">Salary Range (Optional)</label>
-                                    <input type="text" id="salary-range" placeholder="e.g., $90K - $110K" class="mt-1 w-full p-3 border border-gray-300 rounded-lg focus:ring-primary-blue focus:border-primary-blue">
+                                    <label for="salary-range" class="block text-sm font-medium text-gray-700">Salary Range (e.g., $100K, Negotiable)</label>
+                                    <input type="text" id="salary-range" placeholder="e.g., $120K - $150K or Negotiable" class="mt-1 w-full p-3 border border-gray-300 rounded-lg focus:ring-primary-blue focus:border-primary-blue">
                                 </div>
                                 <div class="md:col-span-2">
                                     <label for="job-description" class="block text-sm font-medium text-gray-700">Job Description</label>
-                                    <textarea id="job-description" rows="6" placeholder="Provide a detailed job description, responsibilities, and requirements." class="mt-1 w-full p-3 border border-gray-300 rounded-lg focus:ring-primary-blue focus:border-primary-blue" required></textarea>
+                                    <textarea id="job-description" rows="6" placeholder="Provide a detailed description of the role and requirements." class="mt-1 w-full p-3 border border-gray-300 rounded-lg focus:ring-primary-blue focus:border-primary-blue" required></textarea>
                                 </div>
                             </div>
                             <div class="mt-8 flex justify-end">
                                 <button type="submit" class="btn-primary py-3 px-6 rounded-lg shadow-md hover:shadow-lg transition duration-150 font-semibold">
-                                    Publish Job
+                                    Post Job
                                 </button>
                             </div>
                         </form>
                     </div>
-                    <div id="post-message" class="mt-4 text-green-600 font-semibold hidden">Job posted successfully! Redirecting...</div>
+                    <div id="post-message" class="mt-4 text-green-600 font-semibold text-center hidden">Job posted successfully! Redirecting...</div>
                 </div>
             `;
         };
         
-        // Generic Placeholder Page Renderer
-        const renderPlaceholder = (title, content) => {
-            document.getElementById('navbar').classList.remove('hidden');
-            document.getElementById('content-area').innerHTML = `
-                <div class="flex flex-col items-center justify-center p-8 text-center min-h-[50vh]">
-                    <svg class="h-16 w-16 text-primary-blue mb-4" fill="none" stroke="currentColor" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg">
-                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 11H5m14 0a2 2 0 012 2v6a2 2 0 01-2 2H5a2 2 0 01-2-2v-6a2 2 0 012-2m14 0V9a2 2 0 00-2-2M5 11V9a2 2 0 012-2m0 0V5a2 2 0 012-2h6a2 2 0 012 2v2M7 7h10" />
-                    </svg>
-                    <h1 class="text-3xl font-extrabold text-gray-900 mb-4">${title}</h1>
-                    <p class="text-lg text-secondary-gray max-w-xl">${content}</p>
-                    <button onclick="navigateTo('dashboard')" class="mt-6 btn-primary py-2 px-5 rounded-lg font-semibold">Go to Dashboard</button>
+        const renderNotifications = () => {
+             document.getElementById('navbar').classList.remove('hidden');
+             document.getElementById('content-area').innerHTML = `
+                <div class="p-4 sm:p-6 lg:p-8 max-w-4xl mx-auto">
+                    <h1 class="text-3xl font-extrabold text-gray-900 mb-6">Notifications</h1>
+                    <p class="text-secondary-gray mb-8">View recent activity and updates about your applications.</p>
+                    
+                    <div class="bg-white p-6 rounded-xl card space-y-4">
+                        <div class="border-b pb-4">
+                            <p class="font-semibold text-gray-800">Your application for 'UX Designer' at Design Studio has been viewed!</p>
+                            <p class="text-sm text-secondary-gray mt-1 flex items-center"><i class="far fa-clock mr-2"></i>2 hours ago</p>
+                        </div>
+                        <div class="border-b pb-4">
+                            <p class="font-semibold text-gray-800">Job Alert: New 'Marketing Manager' role matching your profile in London.</p>
+                            <p class="text-sm text-secondary-gray mt-1 flex items-center"><i class="far fa-clock mr-2"></i>1 day ago</p>
+                        </div>
+                        <div class="border-b pb-4">
+                            <p class="font-semibold text-gray-800">Welcome to JobConnect! Complete your profile to start applying.</p>
+                            <p class="text-sm text-secondary-gray mt-1 flex items-center"><i class="far fa-clock mr-2"></i>3 days ago</p>
+                        </div>
+                        <p class="text-center text-secondary-gray pt-4">No older notifications.</p>
+                    </div>
                 </div>
-            `;
+             `;
+        };
+        
+        const renderAbout = () => {
+             document.getElementById('navbar').classList.remove('hidden');
+             document.getElementById('content-area').innerHTML = `
+                <div class="p-4 sm:p-6 lg:p-8 max-w-4xl mx-auto">
+                    <h1 class="text-3xl font-extrabold text-gray-900 mb-6">About JobConnect</h1>
+                    <div class="bg-white p-6 rounded-xl card space-y-4 text-gray-700">
+                        <p>JobConnect is a Minimum Viable Product (MVP) designed to facilitate professional networking and job discovery in a secure, real-time environment using Firebase Firestore.</p>
+                        <p class="font-semibold pt-2">Our Mission</p>
+                        <p>To create a seamless, efficient platform that connects top talent with innovative companies, focusing on simplicity and user experience. This prototype demonstrates real-time data synchronization for job listings and applications.</p>
+                        <p class="font-semibold pt-2">Key Features</p>
+                        <ul class="list-disc list-inside space-y-1 pl-4 text-sm text-secondary-gray">
+                            <li>Real-time Job Listings & Filtering.</li>
+                            <li>Simple Profile Management for quick applications.</li>
+                            <li>Secure Authentication (Simulated Email/Password for demo).</li>
+                            <li>Collaborative environment enabled by shared User IDs.</li>
+                        </ul>
+                    </div>
+                </div>
+             `;
         };
 
+        const renderContact = () => {
+             document.getElementById('navbar').classList.remove('hidden');
+             document.getElementById('content-area').innerHTML = `
+                <div class="p-4 sm:p-6 lg:p-8 max-w-4xl mx-auto">
+                    <h1 class="text-3xl font-extrabold text-gray-900 mb-6">Contact Us</h1>
+                    <div class="bg-white p-6 rounded-xl card space-y-4 text-gray-700">
+                        <p>We'd love to hear from you! Since this is an MVP, please use the following simulated contact information for inquiries.</p>
+                        
+                        <div class="space-y-3 pt-4">
+                            <div class="flex items-center">
+                                <i class="fas fa-envelope text-primary-blue w-6"></i>
+                                <span class="ml-3 font-medium">Email:</span> <a href="mailto:support@jobconnect.com" class="ml-2 text-primary-blue hover:underline">support@jobconnect.com</a>
+                            </div>
+                            <div class="flex items-center">
+                                <i class="fas fa-phone-alt text-primary-blue w-6"></i>
+                                <span class="ml-3 font-medium">Phone:</span> <span class="ml-2">(555) 123-4567</span>
+                            </div>
+                            <div class="flex items-center">
+                                <i class="fas fa-map-pin text-primary-blue w-6"></i>
+                                <span class="ml-3 font-medium">Address:</span> <span class="ml-2">101 Innovation Drive, Tech City, Global</span>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+             `;
+        };
+        
 
         // --- Navigation and State Control ---
+
         const setUIState = (page) => {
             currentPage = page;
             switch (page) {
-                case 'login':
-                    renderLogin();
-                    break;
                 case 'dashboard':
                     renderDashboard();
                     break;
-                case 'profile':
-                    renderProfile();
-                    break;
                 case 'jobs':
                     renderJobs();
+                    break;
+                case 'profile':
+                    renderProfile();
                     break;
                 case 'postJob':
                     renderPostJob();
                     break;
                 case 'notifications':
-                    renderPlaceholder('Notifications', 'This feature is coming soon! Check back later for your latest updates, application statuses, and messages.');
+                    renderNotifications();
                     break;
                 case 'about':
-                    renderPlaceholder('About JobConnect', 'We are a Minimum Viable Product (MVP) built to connect talented professionals with exciting job opportunities using a modern, efficient technology stack.');
+                    renderAbout();
                     break;
                 case 'contact':
-                    renderPlaceholder('Contact Us', 'For support or inquiries, please reach out to us at support@jobconnect.com. We value your feedback!');
+                    renderContact();
                     break;
+                case 'login':
                 default:
-                    renderDashboard();
+                    renderLogin();
+                    break;
             }
+            window.scrollTo(0, 0); // Scroll to top on navigation
         };
 
         window.navigateTo = (page) => {
             if (!isLoggedIn && page !== 'login') {
                 setUIState('login');
-            } else {
-                setUIState(page);
+                return;
             }
+            setUIState(page);
         };
 
-        // --- Initialize App ---
-        setupFirebase();
+
+        // --- Initialization ---
+        document.addEventListener('DOMContentLoaded', setupFirebase);
     </script>
 </body>
 </html>
