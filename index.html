@@ -4,7 +4,6 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Job Connect: Professional Networking and Job Portal MVP</title>
-    <!-- Load Tailwind CSS -->
     <script src="https://cdn.tailwindcss.com"></script>
     <style>
         /* Custom styles for professional look and feel */
@@ -47,7 +46,6 @@
 
     <div id="app-container" class="max-w-7xl mx-auto w-full">
 
-        <!-- Navigation Bar -->
         <header id="navbar" class="bg-white shadow-lg sticky top-0 z-10 hidden">
             <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
                 <div class="flex justify-between items-center h-16">
@@ -55,12 +53,18 @@
                         <span class="text-2xl font-bold text-primary-blue cursor-pointer" onclick="navigateTo('dashboard')">JobConnect</span>
                     </div>
                     <div class="flex items-center space-x-2 sm:space-x-4 text-sm sm:text-base">
+                        <button onclick="navigateTo('notifications')" class="p-2 rounded-full text-secondary-gray hover:text-primary-blue transition duration-150 relative">
+                            <svg class="h-6 w-6" fill="none" stroke="currentColor" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg">
+                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 17h5l-1.405-1.405A2.032 2.032 0 0118 14.158V11a6.002 6.002 0 00-4-5.659V5a2 2 0 10-4 0v.341C7.67 6.165 6 8.388 6 11v3.159c0 .538-.214 1.055-.595 1.436L4 17h5m6 0v1a3 3 0 11-6 0v-1m6 0H9" />
+                            </svg>
+                            <span id="notification-count-badge" class="absolute top-1 right-1 h-2 w-2 rounded-full bg-red-600 hidden"></span>
+                        </button>
+                        
                         <button onclick="navigateTo('jobs')" class="text-secondary-gray hover:text-primary-blue transition duration-150 p-2 rounded-lg hidden sm:inline">Job Listings</button>
                         <button onclick="navigateTo('profile')" class="text-secondary-gray hover:text-primary-blue transition duration-150 p-2 rounded-lg hidden sm:inline">Profile</button>
                         <button onclick="navigateTo('about')" class="text-secondary-gray hover:text-primary-blue transition duration-150 p-2 rounded-lg hidden sm:inline">About Us</button>
                         <button onclick="navigateTo('contact')" class="text-secondary-gray hover:text-primary-blue transition duration-150 p-2 rounded-lg hidden sm:inline">Contact Us</button>
 
-                        <!-- Post Job Button -->
                         <button onclick="navigateTo('postJob')" class="text-white bg-indigo-600 hover:bg-indigo-700 font-semibold py-2 px-3 sm:px-4 rounded-lg shadow transition duration-150 whitespace-nowrap text-sm">Post Job</button>
 
                         <button onclick="handleSignOut()" class="text-red-500 hover:text-red-700 transition duration-150 p-2 rounded-lg border border-red-500 hover:border-red-700 text-sm">Sign Out</button>
@@ -69,18 +73,14 @@
             </div>
         </header>
 
-        <!-- Main Content Area -->
         <main id="content-area" class="flex-grow p-4 sm:p-8">
-            <!-- Views will be rendered here -->
-        </main>
+            </main>
 
-        <!-- Loading Spinner (Hidden by default) -->
         <div id="loading-overlay" class="fixed inset-0 bg-gray-900 bg-opacity-70 z-50 flex items-center justify-center hidden">
             <div class="animate-spin rounded-full h-12 w-12 border-4 border-t-4 border-t-primary-blue border-gray-200"></div>
             <p class="ml-4 text-white text-lg">Loading...</p>
         </div>
 
-        <!-- Apply Modal (Hidden by default) -->
         <div id="apply-modal" class="fixed inset-0 bg-gray-900 bg-opacity-70 z-40 flex items-center justify-center hidden">
             <div class="bg-white p-8 rounded-xl card max-w-lg w-full m-4">
                 <h3 id="modal-title" class="text-2xl font-semibold text-primary-blue mb-4">Confirm Application</h3>
@@ -88,7 +88,6 @@
                 <p id="apply-instruction" class="text-secondary-gray mb-6">Are you sure you want to apply for this position? We will submit your profile details and resume link.</p>
                 <div id="apply-message" class="text-green-600 font-semibold text-lg mb-4 hidden"></div>
                 <div class="flex justify-end space-x-3">
-                    <!-- Updated button text to "Close" when successful message is shown -->
                     <button id="cancel-btn" onclick="hideApplyModal()" class="text-secondary-gray border border-gray-300 py-2 px-5 rounded-lg shadow-md hover:bg-gray-100 transition duration-150">Cancel</button>
                     <button id="confirm-apply-btn" onclick="submitApplication()" class="btn-primary py-2 px-5 rounded-lg shadow-md hover:shadow-lg transition duration-150">Apply</button>
                 </div>
@@ -96,7 +95,6 @@
         </div>
     </div>
 
-    <!-- Firebase SDK Imports (MUST be type="module") -->
     <script type="module">
         import { initializeApp } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-app.js";
         import { getAuth, signInAnonymously, signInWithCustomToken, onAuthStateChanged, signOut } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-auth.js";
@@ -245,21 +243,18 @@
                     <p class="text-secondary-gray mb-8">Welcome back, Job Seeker! Your User ID (for collaboration) is: <span class="font-mono bg-gray-200 px-2 py-1 rounded-md text-sm">${window.userId || 'Not Authenticated'}</span></p>
 
                     <div class="grid grid-cols-1 md:grid-cols-3 gap-6">
-                        <!-- Widget 1: Jobs Applied (Simulated) -->
                         <div class="bg-white p-6 rounded-xl card border-l-4 border-primary-blue">
                             <p class="text-sm text-secondary-gray">Jobs Applied (Simulated)</p>
                             <p class="text-3xl font-bold text-gray-900 mt-1">42</p>
                             <span class="text-sm text-green-600">↑ 1 New This Week</span>
                         </div>
 
-                        <!-- Widget 2: Profile Completion -->
                         <div class="bg-white p-6 rounded-xl card border-l-4 border-green-600 cursor-pointer hover:bg-gray-50" onclick="navigateTo('profile')">
                             <p class="text-sm text-secondary-gray">Profile Completion</p>
                             <p class="text-3xl font-bold text-gray-900 mt-1">75%</p>
                             <span class="text-sm text-primary-blue">Click to complete!</span>
                         </div>
 
-                        <!-- Widget 3: Open Jobs (Real-time from Firestore) -->
                         <div class="bg-white p-6 rounded-xl card border-l-4 border-yellow-600 cursor-pointer hover:bg-gray-50" onclick="navigateTo('jobs')">
                             <p class="text-sm text-secondary-gray">Total Open Jobs</p>
                             <p class="text-3xl font-bold text-gray-900 mt-1">${window.jobs.length}</p>
@@ -267,11 +262,9 @@
                         </div>
                     </div>
 
-                    <!-- Featured Jobs Section -->
                     <div class="mt-10">
                         <h2 class="text-2xl font-bold text-gray-900 mb-4">Featured Job</h2>
                         <div class="bg-white p-6 rounded-xl card space-y-4">
-                            <!-- Show the most recent job listing from the list -->
                             ${window.jobs.length > 0 ? `
                                 <div class="flex flex-col sm:flex-row justify-between items-start sm:items-center border-b pb-3">
                                     <div>
@@ -298,23 +291,19 @@
                     <div class="bg-white p-6 rounded-xl card">
                         <form onsubmit="event.preventDefault(); saveProfile()">
                             <div class="grid grid-cols-1 gap-6 md:grid-cols-2">
-                                <!-- Name Field -->
                                 <div>
                                     <label for="p-name" class="block text-sm font-medium text-gray-700">Full Name</label>
                                     <input type="text" id="p-name" value="Jane Doe" class="mt-1 w-full p-3 border border-gray-300 rounded-lg focus:ring-primary-blue focus:border-primary-blue" required>
                                 </div>
-                                <!-- Title Field -->
                                 <div>
                                     <label for="p-title" class="block text-sm font-medium text-gray-700">Current Title</label>
                                     <input type="text" id="p-title" value="Software Engineer" class="mt-1 w-full p-3 border border-gray-300 rounded-lg focus:ring-primary-blue focus:border-primary-blue" required>
                                 </div>
-                                <!-- Resume Link Field (NEW) -->
                                 <div class="md:col-span-2">
                                     <label for="p-resume" class="block text-sm font-medium text-gray-700">Resume Link (Add Resume)</label>
                                     <input type="url" id="p-resume" value="https://docs.google.com/my-resume" placeholder="e.g., Google Drive link or personal site link" class="mt-1 w-full p-3 border border-gray-300 rounded-lg focus:ring-primary-blue focus:border-primary-blue">
                                     <p class="mt-1 text-xs text-secondary-gray">This link will be submitted when you click 'Apply Now'.</p>
                                 </div>
-                                <!-- Summary Field -->
                                 <div class="md:col-span-2">
                                     <label for="p-summary" class="block text-sm font-medium text-gray-700">Professional Summary</label>
                                     <textarea id="p-summary" rows="4" class="mt-1 w-full p-3 border border-gray-300 rounded-lg focus:ring-primary-blue focus:border-primary-blue" required>Dynamic and driven engineer with 5 years of experience in full-stack development. Seeking new challenges in Agile environments.</textarea>
@@ -347,11 +336,11 @@
 
             const filtered = window.jobs.filter(job => {
                 const textMatch = job.title.toLowerCase().includes(searchText) || 
-                                  job.company.toLowerCase().includes(searchText) ||
-                                  job.description.toLowerCase().includes(searchText);
+                                     job.company.toLowerCase().includes(searchText) ||
+                                     job.description.toLowerCase().includes(searchText);
                 
                 const locationMatch = locationFilter === 'All' || 
-                                      job.location.toLowerCase().includes(locationFilter.toLowerCase());
+                                         job.location.toLowerCase().includes(locationFilter.toLowerCase());
 
                 return textMatch && locationMatch;
             });
@@ -387,7 +376,6 @@
                     <h1 class="text-3xl font-extrabold text-gray-900 mb-6">Explore Job Listings</h1>
                     <p class="text-secondary-gray mb-4">Browse high-impact opportunities tailored to your skills. There are currently <span id="job-count-span" class="font-bold text-primary-blue">${window.jobs.length}</span> open positions.</p>
 
-                    <!-- Search and Filter Bar (NEW) -->
                     <div class="bg-white p-4 rounded-xl card mb-8 grid grid-cols-1 sm:grid-cols-3 gap-4">
                         <div class="sm:col-span-2">
                             <input type="text" id="search-input" oninput="filterJobs()" placeholder="Search by title, company, or keyword..." class="w-full p-3 border border-gray-300 rounded-lg focus:ring-primary-blue focus:border-primary-blue">
@@ -404,8 +392,7 @@
                     </div>
 
                     <div id="job-results-container" class="grid grid-cols-1 md:grid-cols-2 gap-6">
-                        <!-- Job cards rendered here by renderJobCards() -->
-                    </div>
+                        </div>
                 </div>
             `;
             // Initial render of job cards based on current (unfiltered) list
@@ -446,10 +433,10 @@
                                 </div>
                             </div>
                             <div class="mt-8 flex justify-end items-center">
-                                 <div id="post-message" class="text-green-600 font-semibold mr-4 hidden">Job posted successfully!</div>
-                                 <button type="submit" class="text-white bg-indigo-600 hover:bg-indigo-700 py-3 px-6 rounded-lg shadow-md hover:shadow-lg transition duration-150 font-semibold">
-                                    Publish Job
-                                </button>
+                                    <div id="post-message" class="text-green-600 font-semibold mr-4 hidden">Job posted successfully!</div>
+                                    <button type="submit" class="text-white bg-indigo-600 hover:bg-indigo-700 py-3 px-6 rounded-lg shadow-md hover:shadow-lg transition duration-150 font-semibold">
+                                        Publish Job
+                                    </button>
                             </div>
                         </form>
                     </div>
@@ -502,248 +489,235 @@
                         
                         <form onsubmit="event.preventDefault(); showContactSubmitMessage(event)">
                             <h2 class="text-xl font-semibold text-primary-blue pt-4 mb-4">Send a Message</h2>
-                            <input type="text" placeholder="Your Name" class="w-full p-3 border border-gray-300 rounded-lg mb-4" required>
-                            <input type="email" placeholder="Your Email" class="w-full p-3 border border-gray-300 rounded-lg mb-4" required>
-                            <textarea rows="4" placeholder="Your Message" class="w-full p-3 border border-gray-300 rounded-lg mb-4" required></textarea>
+                            <input type="text" id="contact-name" placeholder="Your Name" class="mt-1 w-full p-3 mb-3 border border-gray-300 rounded-lg focus:ring-primary-blue focus:border-primary-blue" required>
+                            <input type="email" id="contact-email" placeholder="Your Email" class="mt-1 w-full p-3 mb-3 border border-gray-300 rounded-lg focus:ring-primary-blue focus:border-primary-blue" required>
+                            <textarea id="contact-message" rows="4" placeholder="Your Message" class="mt-1 w-full p-3 mb-4 border border-gray-300 rounded-lg focus:ring-primary-blue focus:border-primary-blue" required></textarea>
+                            
                             <div class="flex justify-end items-center">
-                                <div id="contact-message" class="text-green-600 font-semibold mr-4 hidden">Message sent successfully!</div>
-                                <button type="submit" class="btn-primary py-3 px-6 rounded-lg shadow-md hover:shadow-lg transition duration-150 font-semibold">
-                                    Submit
-                                </button>
+                                <div id="contact-message-status" class="text-green-600 font-semibold mr-4 hidden">Message sent!</div>
+                                <button type="submit" class="btn-primary py-2 px-5 rounded-lg shadow-md">Send Message</button>
                             </div>
                         </form>
                     </div>
                 </div>
             `;
             window.showContactSubmitMessage = (event) => {
-                document.getElementById('contact-message').classList.remove('hidden');
-                event.target.reset();
-                setTimeout(() => document.getElementById('contact-message').classList.add('hidden'), 3000);
-            }
+                event.target.reset(); // Clear the form
+                document.getElementById('contact-message-status').classList.remove('hidden');
+                setTimeout(() => document.getElementById('contact-message-status').classList.add('hidden'), 3000);
+            };
+        };
+
+        // NEW: Notifications Page
+        const renderNotifications = () => {
+            document.getElementById('navbar').classList.remove('hidden');
+            document.getElementById('content-area').innerHTML = `
+                <div class="p-4 sm:p-6 lg:p-8 max-w-3xl mx-auto">
+                    <h1 class="text-3xl font-extrabold text-gray-900 mb-6 border-b pb-2">Notifications</h1>
+                    <div class="space-y-4">
+                        <div class="bg-white p-4 rounded-xl card border-l-4 border-primary-blue hover:bg-gray-50 cursor-pointer">
+                            <p class="font-semibold text-gray-900">Application Status Update</p>
+                            <p class="text-sm text-secondary-gray mt-1">Your application for **Senior Software Engineer** at Innovate Solutions Inc. has been viewed! (1 min ago)</p>
+                        </div>
+                        <div class="bg-white p-4 rounded-xl card border-l-4 border-green-600 hover:bg-gray-50 cursor-pointer">
+                            <p class="font-semibold text-gray-900">New Job Match</p>
+                            <p class="text-sm text-secondary-gray mt-1">A new job matching your profile: **Lead UI/UX Designer** is now posted. (3 hours ago)</p>
+                        </div>
+                        <div class="bg-white p-4 rounded-xl card hover:bg-gray-50 cursor-pointer">
+                            <p class="font-semibold text-gray-900">Network Activity</p>
+                            <p class="text-sm text-secondary-gray mt-1">John D. just accepted your connection request. (1 day ago)</p>
+                        </div>
+                        <p class="text-center text-secondary-gray mt-8">No older notifications.</p>
+                    </div>
+                </div>
+            `;
+            // Hide the red badge when the user views the page
+            document.getElementById('notification-count-badge')?.classList.add('hidden');
         };
 
 
-        // --- State Management and Navigation ---
+        // --- State Management ---
+        const VIEWS = {
+            login: renderLogin,
+            dashboard: renderDashboard,
+            jobs: renderJobs,
+            profile: renderProfile,
+            postJob: renderPostJob,
+            about: renderAbout,
+            contact: renderContact,
+            notifications: renderNotifications // NEW VIEW
+        };
+
+        window.navigateTo = (viewName) => {
+            if (VIEWS[viewName]) {
+                setUIState(viewName);
+            } else {
+                console.error("Unknown view:", viewName);
+            }
+        };
 
         const setUIState = (view) => {
             currentPage = view;
-            switch (view) {
-                case 'login':
-                    renderLogin();
-                    break;
-                case 'dashboard':
-                    renderDashboard();
-                    break;
-                case 'profile':
-                    renderProfile();
-                    break;
-                case 'jobs':
-                    renderJobs();
-                    break;
-                case 'postJob':
-                    renderPostJob();
-                    break;
-                case 'about':
-                    renderAbout();
-                    break;
-                case 'contact':
-                    renderContact();
-                    break;
-                default:
-                    console.error("Unknown view state:", view);
-                    renderDashboard();
-            }
-        };
-
-        // Expose navigation globally for onclick events in HTML
-        window.navigateTo = (view) => {
-            if (isLoggedIn || view === 'login') {
-                setUIState(view);
-                console.log("Navigated to:", view, " | Is Logged In:", isLoggedIn);
+            if (isLoggedIn) {
+                document.getElementById('navbar').classList.remove('hidden');
+                VIEWS[view]();
             } else {
-                setUIState('login');
+                if (view === 'login') {
+                    VIEWS.login();
+                } else {
+                    // Redirect to login if not authenticated
+                    VIEWS.login();
+                }
             }
         };
 
-        // --- Auth Handlers ---
+        // --- Event Handlers & Data Manipulation ---
 
-        window.handleLogin = async () => {
-            showLoading(true);
-            await new Promise(r => setTimeout(r, 500)); // Simulate delay
-            
-            if (auth && !auth.currentUser) {
-                 // Rely on onAuthStateChanged to handle the sign-in if Firebase is configured
-                 try {
-                    await signInAnonymously(auth);
-                 } catch (error) {
-                    console.error("Simulated Sign In failed (Firebase not configured or auth error):", error);
-                    // Fallback to manual state update if real auth fails/unavailable
-                    isLoggedIn = true;
-                    window.userId = "simulated-user-" + Math.random().toString(36).substring(2, 9);
-                    setUIState('dashboard');
-                 }
-            } else if (!auth) {
-                 // UI Simulation Mode
-                isLoggedIn = true;
-                window.userId = "simulated-user-" + Math.random().toString(36).substring(2, 9);
-                setUIState('dashboard');
-            }
-            showLoading(false);
+        // Simulated login function (always successful in MVP)
+        window.handleLogin = () => {
+            // In a real app, this would call signInWithEmailAndPassword/createUserWithEmailAndPassword
+            // For the MVP, we simulate a successful login and transition.
+            isLoggedIn = true;
+            // Simulate that the sign-in with anonymous or custom token was successful
+            // For the sake of this MVP, we assume setupFirebase already handled the actual auth state,
+            // so we just force the UI state to dashboard.
+            setUIState('dashboard');
         };
 
         window.handleSignOut = async () => {
-            showLoading(true);
             if (auth) {
                 try {
-                    await signOut(auth); // Use real sign out
+                    await signOut(auth);
                 } catch (error) {
-                    console.error("Sign out failed:", error);
+                    console.error("Sign Out Error:", error);
                 }
             }
             isLoggedIn = false;
             window.userId = null;
+            window.jobs = []; // Clear jobs
             setUIState('login');
-            showLoading(false);
         };
 
-        // --- Job Handlers (Backend Integrated) ---
-
-        // Job Post Handler (Now saves to Firestore)
         window.handleJobPost = async (event) => {
             const form = event.target;
-            const newJob = {
-                title: form.elements['job-title'].value,
-                company: form.elements['company-name'].value,
-                location: form.elements['job-location'].value,
-                salary: form.elements['salary-range'].value || 'Competitive',
-                description: form.elements['job-description'].value,
-                postedBy: window.userId,
-                timestamp: new Date().toISOString()
-            };
-            
-            showLoading(true);
+            const title = document.getElementById('job-title').value;
+            const company = document.getElementById('company-name').value;
+            const location = document.getElementById('job-location').value;
+            const salary = document.getElementById('salary-range').value || 'Competitive';
+            const description = document.getElementById('job-description').value;
 
-            if (db) {
-                try {
-                    // Public data collection path: /artifacts/{appId}/public/data/jobs
-                    await addDoc(collection(db, "artifacts", appId, "public", "data", "jobs"), newJob);
-                    console.log("Job posted successfully to Firestore.");
-                } catch (error) {
-                    console.error("Error posting job to Firestore:", error);
-                }
-            } else {
-                // UI Simulation fallback (optional, as listener should cover it)
-                console.log("Simulated job post due to no database connection.");
-            }
-
-            const messageElement = document.getElementById('post-message');
-            messageElement.classList.remove('hidden');
-            
-            // Navigate away after a short delay
-            setTimeout(() => {
-                showLoading(false);
-                messageElement.classList.add('hidden');
-                form.reset(); 
-                navigateTo('jobs'); 
-            }, 1000);
-        }
-
-        // Apply Handler (Now saves application record to Firestore)
-        window.submitApplication = async () => {
-            if (!currentJobToApply || !window.userId) {
-                console.error("Cannot apply: Missing job details or user ID.");
+            if (!db) {
+                console.warn("Database not available. Simulating job post.");
+                document.getElementById('post-message').textContent = "Job post simulated successfully!";
+                document.getElementById('post-message').classList.remove('hidden');
+                setTimeout(() => document.getElementById('post-message').classList.add('hidden'), 3000);
+                form.reset();
                 return;
             }
 
-            const applyBtn = document.getElementById('confirm-apply-btn');
-            const cancelBtn = document.getElementById('cancel-btn');
-            const messageElement = document.getElementById('apply-message');
-            const instructionsElement = document.getElementById('apply-instruction');
-            const modalTitle = document.getElementById('modal-title');
-            
-            // Initial UI state change
-            applyBtn.disabled = true;
-            messageElement.textContent = "Processing application...";
-            messageElement.classList.remove('hidden');
-            instructionsElement.classList.add('hidden');
+            try {
+                showLoading(true);
+                await addDoc(collection(db, "artifacts", appId, "public", "data", "jobs"), {
+                    title,
+                    company,
+                    location,
+                    salary,
+                    description,
+                    postedBy: window.userId,
+                    timestamp: new Date().toISOString()
+                });
 
-            const applicationRecord = {
-                jobId: currentJobToApply.id,
-                jobTitle: currentJobToApply.title,
-                applicantId: window.userId,
-                resumeLink: document.getElementById('p-resume')?.value || 'Not provided in profile',
-                appliedAt: new Date().toISOString()
-            };
+                // Success message
+                document.getElementById('post-message').textContent = "Job posted successfully!";
+                document.getElementById('post-message').classList.remove('hidden');
+                setTimeout(() => document.getElementById('post-message').classList.add('hidden'), 3000);
+                
+                // Clear the form fields
+                form.reset();
 
-            const successMessage = "Applied for the job, you will be notified."; // Requested message
-
-            if (db) {
-                 try {
-                    // Private data collection path: /artifacts/{appId}/users/{userId}/applications
-                    const path = ["artifacts", appId, "users", window.userId, "applications"];
-                    await addDoc(collection(db, ...path), applicationRecord);
-                    
-                    // Success UI update
-                    messageElement.textContent = successMessage; 
-                    messageElement.classList.remove('text-red-600');
-                    applyBtn.classList.add('hidden'); 
-                    cancelBtn.textContent = 'Close'; // Change button text
-                    modalTitle.textContent = 'Application Submitted';
-                    console.log("Application recorded in Firestore:", applicationRecord);
-                } catch (error) {
-                    // Error UI update
-                    messageElement.textContent = `Application failed: ${error.message}`;
-                    messageElement.classList.add('text-red-600');
-                    instructionsElement.classList.remove('hidden');
-                    applyBtn.disabled = false;
-                    cancelBtn.textContent = 'Cancel';
-                    console.error("Error submitting application:", error);
-                }
-            } else {
-                 // Simulation mode success UI update
-                 messageElement.textContent = successMessage; 
-                 applyBtn.classList.add('hidden'); 
-                 cancelBtn.textContent = 'Close';
-                 modalTitle.textContent = 'Application Submitted';
+            } catch (error) {
+                console.error("Error posting job:", error);
+                document.getElementById('post-message').textContent = "Error posting job. See console.";
+                document.getElementById('post-message').classList.remove('hidden');
+                document.getElementById('post-message').classList.remove('text-green-600');
+                document.getElementById('post-message').classList.add('text-red-600');
+            } finally {
+                showLoading(false);
             }
+        };
 
-            // Close modal after delay
-            setTimeout(() => {
-                hideApplyModal();
-                // Reset modal state for the next use
-                applyBtn.disabled = false;
-                applyBtn.classList.remove('hidden');
-                cancelBtn.textContent = 'Cancel';
-                instructionsElement.classList.remove('hidden');
-                modalTitle.textContent = 'Confirm Application';
-                messageElement.classList.remove('text-red-600');
-            }, 2500);
-        }
-
-
-        // --- Modal Handlers ---
+        // --- Apply Modal Logic ---
 
         window.showApplyModal = (jobId, jobTitle) => {
-            currentJobToApply = { id: jobId, title: jobTitle };
-            document.getElementById('apply-job-title').textContent = jobTitle;
-            document.getElementById('apply-modal').classList.remove('hidden');
+            currentJobToApply = window.jobs.find(job => job.id === jobId);
+            if (!currentJobToApply) return;
+
+            document.getElementById('apply-job-title').textContent = `Applying for: ${jobTitle}`;
             document.getElementById('apply-message').classList.add('hidden');
-            document.getElementById('confirm-apply-btn').disabled = false;
+            document.getElementById('apply-message').classList.remove('text-red-600');
+            document.getElementById('apply-message').classList.add('text-green-600');
+            document.getElementById('apply-instruction').classList.remove('hidden');
             document.getElementById('confirm-apply-btn').classList.remove('hidden');
             document.getElementById('cancel-btn').textContent = 'Cancel';
-            document.getElementById('apply-instruction').classList.remove('hidden');
-            document.getElementById('modal-title').textContent = 'Confirm Application';
-
-        };
+            
+            document.getElementById('apply-modal').classList.remove('hidden');
+        }
 
         window.hideApplyModal = () => {
             document.getElementById('apply-modal').classList.add('hidden');
-        };
+            currentJobToApply = null;
+        }
 
+        window.submitApplication = async () => {
+            if (!currentJobToApply) return;
+            
+            // In a real application, you would pull the user's profile data here.
+            // For the MVP, we simulate success and log to the console/firestore.
 
-        // --- App Initialization ---
-        window.onload = setupFirebase;
+            if (!db) {
+                console.warn("Database not available. Simulating application.");
+                // Simulate UI success for the user
+                document.getElementById('apply-instruction').classList.add('hidden');
+                document.getElementById('confirm-apply-btn').classList.add('hidden');
+                document.getElementById('apply-message').textContent = `Application for "${currentJobToApply.title}" simulated successfully!`;
+                document.getElementById('apply-message').classList.remove('hidden');
+                document.getElementById('cancel-btn').textContent = 'Close';
+                return;
+            }
+
+            try {
+                showLoading(true);
+                await addDoc(collection(db, "artifacts", appId, "public", "data", "applications"), {
+                    jobId: currentJobToApply.id,
+                    jobTitle: currentJobToApply.title,
+                    company: currentJobToApply.company,
+                    applicantId: window.userId,
+                    applicantName: "Jane Doe (Simulated)", // Replace with real profile data
+                    applicantResume: "https://docs.google.com/my-resume (Simulated)", // Replace with real profile data
+                    timestamp: new Date().toISOString()
+                });
+                
+                // UI update for success
+                document.getElementById('apply-instruction').classList.add('hidden');
+                document.getElementById('confirm-apply-btn').classList.add('hidden');
+                document.getElementById('apply-message').textContent = `Successfully applied for: ${currentJobToApply.title}!`;
+                document.getElementById('apply-message').classList.remove('hidden');
+                document.getElementById('cancel-btn').textContent = 'Close'; // Change button to close
+            } catch (error) {
+                console.error("Error submitting application:", error);
+                document.getElementById('apply-message').textContent = `Application failed: ${error.message}`;
+                document.getElementById('apply-message').classList.remove('hidden');
+                document.getElementById('apply-message').classList.remove('text-green-600');
+                document.getElementById('apply-message').classList.add('text-red-600');
+                document.getElementById('confirm-apply-btn').classList.add('hidden');
+                document.getElementById('cancel-btn').textContent = 'Close';
+            } finally {
+                showLoading(false);
+            }
+        }
+
+        // --- Initialization ---
+        setupFirebase();
     </script>
-
 </body>
 </html>
