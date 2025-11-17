@@ -61,7 +61,7 @@
                             <span id="notification-count-badge" class="absolute top-1 right-1 h-2 w-2 rounded-full bg-red-600 hidden"></span>
                         </button>
                         
-                        <button onclick="navigateTo('jobs')" class="text-secondary-gray hover:text-primary-blue transition duration-150 p-2 rounded-lg hidden sm:inline">Job Listings</button>
+                        <button onclick="navigateTo('jobs')" class="text-secondary-gray hover:text-primary-blue transition duration-150 p-2 rounded-lg hidden sm:inline">My Job Postings</button> 
                         <button onclick="navigateTo('profile')" class="text-secondary-gray hover:text-primary-blue transition duration-150 p-2 rounded-lg hidden sm:inline">Profile</button>
                         <button onclick="navigateTo('about')" class="text-secondary-gray hover:text-primary-blue transition duration-150 p-2 rounded-lg hidden sm:inline">About Us</button>
                         <button onclick="navigateTo('contact')" class="text-secondary-gray hover:text-primary-blue transition duration-150 p-2 rounded-lg hidden sm:inline">Contact Us</button>
@@ -97,27 +97,33 @@
     </div>
 
     <script type="module">
+        // UPDATED: Added 'where' to imports
         import { initializeApp } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-app.js";
         import { getAuth, signInAnonymously, signInWithEmailAndPassword, createUserWithEmailAndPassword, onAuthStateChanged, signOut } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-auth.js";
-        import { getFirestore, collection, addDoc, onSnapshot, query, setLogLevel, doc, getDoc, setDoc } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-firestore.js";
+        import { getFirestore, collection, addDoc, onSnapshot, query, setLogLevel, doc, getDoc, setDoc, where } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-firestore.js";
 
         // Enable debug logging for Firestore
         setLogLevel('Debug');
 
         // Global Firebase Configuration (Mandatory Setup)
-        const appId = typeof __app_id !== 'undefined' ? __app_id : 'job-connect-app';
-        const firebaseConfig = typeof __firebase_config !== 'undefined' ? JSON.parse(__firebase_config) : {};
-        const initialAuthToken = typeof __initial_auth_token !== 'undefined' ? __initial_auth_token : null;
-
+        // For Firebase JS SDK v7.20.0 and later, measurementId is optional
+const firebaseConfig = {
+  apiKey: "AIzaSyDX7TYLd3qKUCdw4_M30G7-TIq44JpLhfs",
+  authDomain: "job-connect-57c21.firebaseapp.com",
+  projectId: "job-connect-57c21",
+  storageBucket: "job-connect-57c21.firebasestorage.app",
+  messagingSenderId: "174703296266",
+  appId: "1:174703296266:web:8182af2b6743ba484f04f3",
+  measurementId: "G-K2KJ6LNG25"
+};
         let app, db, auth;
         window.userId = null;
         let isLoggedIn = false;
         let currentPage = 'login'; // Initial UI state
         
-        // Global State for Jobs and User Profile
-        window.jobs = []; 
+        // UPDATED: Renamed global jobs variable for clarity (tracks only jobs posted by this user)
+        window.userPostedJobs = []; 
         window.userProfile = { name: '', title: '', resumeLink: '', summary: '' };
-        // ADDED: salaryRange filter state
         let currentJobFilter = { search: '', location: 'All', salaryRange: 'All' }; 
         let currentJobToApply = null; // Store job details for the modal
 
@@ -129,27 +135,26 @@
         
         /**
          * Parses a salary string (e.g., "$120K+", "$80K", "Negotiable") into a minimum annual salary in thousands (K).
-         * Used for numerical filtering.
-         * @param {string} salary
-         * @returns {number} Minimum salary in thousands (e.g., 120 for $120K)
          */
         const parseSalaryToMinK = (salary) => {
             if (!salary || salary.toLowerCase() === 'negotiable') return 0;
-            // Matches $XXXK and captures XXX
             const match = salary.match(/\$(\d+)K/i); 
             return match ? parseInt(match[1], 10) : 0;
         };
 
-        // --- CORE NAVIGATION LOGIC (MISSING PART) ---
+        // --- CORE NAVIGATION LOGIC ---
         
-        /**
-         * Renders the UI component based on the current page state.
-         * @param {string} newState - The key for the page to render ('login', 'dashboard', 'jobs', etc.)
-         */
         const setUIState = (newState) => {
             currentPage = newState;
-            // Force-close the modal on navigation
             hideApplyModal(); 
+            
+            // Check if navigation bar should be visible
+            const navbar = document.getElementById('navbar');
+            if (newState === 'login') {
+                navbar.classList.add('hidden');
+            } else {
+                navbar.classList.remove('hidden');
+            }
             
             switch (currentPage) {
                 case 'dashboard':
@@ -167,6 +172,12 @@
                 case 'notifications':
                     renderNotifications();
                     break;
+                case 'about':
+                    renderAbout();
+                    break;
+                case 'contact':
+                    renderContact();
+                    break;
                 case 'login':
                 default:
                     renderLogin();
@@ -174,10 +185,6 @@
             }
         };
 
-        /**
-         * Public function to navigate to a new page, checks authentication status.
-         * @param {string} page - The key for the page to navigate to.
-         */
         window.navigateTo = (page) => {
             if (!isLoggedIn && page !== 'login') {
                 console.warn(`Attempted to access ${page} without being logged in. Redirecting to login.`);
@@ -203,27 +210,13 @@
                             if (user) {
                                 window.userId = user.uid;
                                 isLoggedIn = true;
-                                // Start listening to jobs once authenticated
+                                // Start listening to ONLY the user's posted jobs once authenticated
                                 setupJobListener(); 
-                                // Fetch user profile
                                 await fetchUserProfile();
                                 setUIState('dashboard');
                             } else {
-                                // Attempt sign in with token or fallback to Anonymous Sign In
-                                if (initialAuthToken) {
-                                    try {
-                                        // Note: signInWithCustomToken is not directly exported in this snippet, 
-                                        // assuming it's available or falling through to anonymous/login.
-                                        // For this MVP, we simplify to force login screen if no user is found.
-                                        setUIState('login');
-                                    } catch (error) {
-                                        console.error("Custom Token Sign In Failed:", error);
-                                        setUIState('login');
-                                    }
-                                } else {
-                                    // Fallback to the login screen for user sign-in
-                                    setUIState('login');
-                                }
+                                // Fallback to the login screen for user sign-in
+                                setUIState('login');
                             }
                             unsubscribe();
                             resolve();
@@ -231,16 +224,16 @@
                     });
                 } else {
                     console.warn("Firebase config not available. Running in UI simulation mode.");
-                    // Fallback simulated user ID for UI-only mode
                     window.userId = "simulated-user-guest";
-                    isLoggedIn = true; // Assume logged in for UI demo purposes
+                    isLoggedIn = true; 
                     setUIState('dashboard');
-                    // UPDATED: Added a job for the 'Low' salary range
-                    window.jobs = [
-                        { id: 'job1', title: 'Senior Developer', company: 'Tech Corp', location: 'Remote', salary: '$120K+', description: 'Build scalable applications with React/Node.js. Must have 5+ years experience and be proficient in cloud technologies (AWS/Azure). Great benefits and flexible hours.', timestamp: Date.now() - 3600000 },
-                        { id: 'job2', title: 'UX Designer', company: 'Design Studio', location: 'NY', salary: '$80K', description: 'Design user-friendly interfaces for a new mobile app. Experience with Figma is required. Must be able to conduct user interviews.', timestamp: Date.now() - 7200000 },
-                        { id: 'job3', title: 'Marketing Manager', company: 'Brand Innovators', location: 'London', salary: '$95K', description: 'Lead digital marketing campaigns and manage a small team. Focus on SEO/SEM and content strategy.', timestamp: Date.now() - 10800000 },
-                        { id: 'job4', title: 'Junior Analyst Internship', company: 'Startup Co', location: 'Remote', salary: '$50K', description: 'Entry-level position analyzing market trends and assisting senior staff.', timestamp: Date.now() - 12800000 }
+                    
+                    // Simulated data for demo mode (This data will be used as the *user's* posted jobs in this demo)
+                    window.userPostedJobs = [
+                        { id: 'job1', title: 'Senior Developer', company: 'Tech Corp', location: 'Remote', salary: '$120K+', description: 'Build scalable applications with React/Node.js.', timestamp: Date.now() - 3600000, postedBy: window.userId },
+                        { id: 'job2', title: 'UX Designer', company: 'Design Studio', location: 'NY', salary: '$80K', description: 'Design user-friendly interfaces for a new mobile app.', timestamp: Date.now() - 7200000, postedBy: window.userId },
+                        { id: 'job3', title: 'Marketing Manager', company: 'Brand Innovators', location: 'London', salary: '$95K', description: 'Lead digital marketing campaigns.', timestamp: Date.now() - 10800000, postedBy: window.userId },
+                        { id: 'job4', title: 'Junior Analyst Internship', company: 'Startup Co', location: 'Remote', salary: '$50K', description: 'Entry-level position analyzing market trends.', timestamp: Date.now() - 12800000, postedBy: window.userId }
                     ];
                 }
             } catch (error) {
@@ -251,16 +244,14 @@
             }
         }
 
-        // --- Authentication Handlers (FIXED) ---
+        // --- Authentication Handlers ---
 
         window.handleLogin = async () => {
             const email = document.getElementById('email').value;
             const password = document.getElementById('password').value;
             if (!email || !password) return;
-            // Clear previous message
             document.getElementById('login-error-message').classList.add('hidden');
 
-            // If Firebase is not initialized, simulate login success
             if (!auth) {
                 isLoggedIn = true;
                 window.userId = "simulated-user-" + email.split('@')[0];
@@ -270,15 +261,11 @@
 
             showLoading(true);
             try {
-                // Try to sign in
                 await signInWithEmailAndPassword(auth, email, password);
-                // The onAuthStateChanged listener in setupFirebase handles the state change,
-                // but since we unsubscribed it, we explicitly call it here for immediate UI update.
                 await fetchUserProfile();
                 setUIState('dashboard'); 
             } catch (error) {
                 if (error.code === 'auth/user-not-found' || error.code === 'auth/wrong-password') {
-                    // If user not found, try to sign up/create the user
                     try {
                         await createUserWithEmailAndPassword(auth, email, password);
                         document.getElementById('login-error-message').textContent = "Account created successfully! You are now logged in.";
@@ -303,7 +290,6 @@
 
         window.handleSignOut = async () => {
             if (!auth) {
-                // Simulated sign out for UI-only mode
                 isLoggedIn = false;
                 window.userId = null;
                 setUIState('login');
@@ -324,13 +310,11 @@
 
         const fetchUserProfile = async () => {
             if (!db || !window.userId) return;
-            // Path: artifacts/{appId}/users/{userId}/profile/details
             const userDocRef = doc(db, "artifacts", appId, "users", window.userId, "profile", "details");
             try {
                 const docSnap = await getDoc(userDocRef);
                 if (docSnap.exists()) {
                     window.userProfile = docSnap.data();
-                    console.log("Profile fetched:", window.userProfile);
                 } else {
                     console.log("No profile found, using defaults.");
                 }
@@ -349,18 +333,14 @@
             document.getElementById('save-message').classList.remove('hidden');
             setTimeout(() => document.getElementById('save-message').classList.add('hidden'), 3000);
 
-            if (!db || !window.userId) return; // Skip Firestore if not configured
+            if (!db || !window.userId) return; 
 
             showLoading(true);
             try {
-                // Path: artifacts/{appId}/users/{userId}/profile/details
                 const userDocRef = doc(db, "artifacts", appId, "users", window.userId, "profile", "details");
                 await setDoc(userDocRef, window.userProfile, { merge: true });
-                console.log("Profile saved to Firestore!");
             } catch (error) {
                 console.error("Error saving profile:", error);
-                // Using console log instead of alert
-                console.log("Failed to save profile to database."); 
             } finally {
                 showLoading(false);
             }
@@ -369,7 +349,7 @@
         // --- Job Handlers ---
 
         window.handleJobPost = async (event) => {
-            event.preventDefault(); // Prevent form submission default action
+            event.preventDefault(); 
             
             const title = document.getElementById('job-title').value;
             const company = document.getElementById('company-name').value;
@@ -377,8 +357,8 @@
             const salary = document.getElementById('salary-range').value || 'Negotiable';
             const description = document.getElementById('job-description').value;
 
-            if (!title || !company || !location || !description) {
-                console.log("Please fill in all required job fields.");
+            if (!title || !company || !location || !description || !window.userId) {
+                console.log("Please fill in all required job fields and ensure user is logged in.");
                 return;
             }
 
@@ -389,46 +369,42 @@
                 salary,
                 description,
                 timestamp: Date.now(),
-                postedBy: window.userId,
+                postedBy: window.userId, // CRITICAL: Ensure the user ID is added here
             };
 
             document.getElementById('post-message').classList.remove('hidden');
             setTimeout(() => {
                 document.getElementById('post-message').classList.add('hidden');
-                // Navigate to the jobs page after successful post (simulated/actual)
                 navigateTo('jobs'); 
             }, 1000);
 
-            if (!db || !appId) return; // Skip Firestore if not configured
+            if (!db || !appId) return; 
 
             showLoading(true);
             try {
-                // Firestore path: artifacts/{appId}/public/data/jobs/{jobId}
                 const jobsCollection = collection(db, "artifacts", appId, "public", "data", "jobs");
                 await addDoc(jobsCollection, newJob);
-                console.log("Job posted successfully to Firestore!");
-                // Clear form fields
                 event.target.reset();
             } catch (error) {
                 console.error("Error posting job:", error);
-                console.log("Failed to post job to database.");
             } finally {
                 showLoading(false);
             }
         };
         
-        window.showApplyModal = (jobId, jobTitle) => {
-            currentJobToApply = window.jobs.find(j => j.id === jobId);
+        window.showApplyModal = (jobId, jobTitle, jobCompany) => {
+            // Note: This modal is still geared toward job seeking, but we'll leave it in place 
+            // even though the main view is employer-focused.
+            currentJobToApply = window.userPostedJobs.find(j => j.id === jobId);
             if (!currentJobToApply) return;
             
+            document.getElementById('modal-title').textContent = "Simulated Application";
             document.getElementById('apply-job-title').textContent = currentJobToApply.title + ' at ' + currentJobToApply.company;
+            document.getElementById('apply-instruction').textContent = 'This is a simulated application for the role you posted. On a real system, you would see applicant details here.';
             document.getElementById('apply-modal').classList.remove('hidden');
             document.getElementById('apply-message').classList.add('hidden');
-            document.getElementById('apply-message').classList.remove('text-red-600');
-            document.getElementById('apply-message').classList.add('text-green-600');
-            document.getElementById('apply-instruction').classList.remove('hidden');
-            document.getElementById('confirm-apply-btn').classList.remove('hidden');
-            document.getElementById('cancel-btn').textContent = 'Cancel';
+            document.getElementById('confirm-apply-btn').classList.add('hidden');
+            document.getElementById('cancel-btn').textContent = 'Close';
         };
 
         window.hideApplyModal = () => {
@@ -437,84 +413,50 @@
         };
 
         window.submitApplication = async () => {
-            if (!currentJobToApply || !window.userId) return;
-            
-            if (!window.userProfile.resumeLink) {
-                 // Simple validation
-                 console.log("Please update your profile with a Resume Link before applying.");
-                 hideApplyModal();
-                 navigateTo('profile');
-                 return;
-            }
-
-            const applicationData = {
-                jobId: currentJobToApply.id,
-                jobTitle: currentJobToApply.title,
-                applicantId: window.userId,
-                timestamp: Date.now(),
-                // Send profile data stored in global state
-                applicantName: window.userProfile.name || 'Anonymous User',
-                applicantTitle: window.userProfile.title || 'Job Seeker',
-                resumeLink: window.userProfile.resumeLink,
-            };
-
-            // Display success message and disable button
-            document.getElementById('apply-instruction').classList.add('hidden');
-            document.getElementById('confirm-apply-btn').classList.add('hidden');
-            document.getElementById('apply-message').textContent = 'Application submitted successfully! (Simulated)';
-            document.getElementById('apply-message').classList.remove('hidden');
-            document.getElementById('cancel-btn').textContent = 'Close';
-            
-            if (!db || !appId) return; // Skip Firestore if not configured
-
-            showLoading(true);
-            try {
-                // Firestore path: artifacts/{appId}/public/data/applications/{applicationId}
-                const applicationsCollection = collection(db, "artifacts", appId, "public", "data", "applications");
-                await addDoc(applicationsCollection, applicationData);
-                console.log("Application submitted to Firestore!");
-            } catch (error) {
-                console.error("Error submitting application:", error);
-                document.getElementById('apply-message').textContent = 'Application failed to submit to database.';
-                document.getElementById('apply-message').classList.remove('text-green-600');
-                document.getElementById('apply-message').classList.add('text-red-600');
-            } finally {
-                showLoading(false);
-            }
+             // We are changing this to simply close the modal since the view is now employer-focused.
+             hideApplyModal();
         };
 
 
-        // --- Firestore Listeners ---
+        // --- Firestore Listeners (UPDATED FOR USER-SPECIFIC JOBS) ---
 
         const setupJobListener = () => {
-            if (!db || !appId) return;
+            if (!db || !appId || !window.userId) {
+                console.warn("Cannot set up job listener: DB or User ID is missing.");
+                return;
+            }
 
             // Firestore path: artifacts/{appId}/public/data/jobs
             const jobsCollection = collection(db, "artifacts", appId, "public", "data", "jobs");
-            const q = query(jobsCollection); 
+            
+            // CRITICAL: Query to filter documents where the 'postedBy' field equals the current user's ID.
+            const q = query(
+                jobsCollection, 
+                where("postedBy", "==", window.userId)
+            ); 
 
             onSnapshot(q, (snapshot) => {
-                window.jobs = [];
+                window.userPostedJobs = []; // Clear old list
                 snapshot.forEach((doc) => {
                     // Add document ID and data to the global array
-                    window.jobs.push({ id: doc.id, ...doc.data() });
+                    window.userPostedJobs.push({ id: doc.id, ...doc.data() });
                 });
+                
                 // Sort by timestamp (most recent first)
-                window.jobs.sort((a, b) => b.timestamp - a.timestamp); // Use numbers for direct comparison
+                window.userPostedJobs.sort((a, b) => b.timestamp - a.timestamp);
                 
                 // Re-render the job listings if the user is currently viewing them
                 if (currentPage === 'jobs') {
-                    renderJobs();
+                    renderJobs(); 
                 }
                 // Also update dashboard widgets
                 if (currentPage === 'dashboard') {
-                    renderDashboard();
+                    renderDashboard(); 
                 }
-                console.log("Jobs updated from Firestore:", window.jobs.length);
+                console.log("Jobs posted by user updated from Firestore:", window.userPostedJobs.length);
             }, (error) => {
                 console.error("Error listening to job collection:", error);
-                // Fallback to empty array if connection fails
-                window.jobs = [];
+                window.userPostedJobs = [];
                 if (currentPage === 'jobs') {
                     renderJobs();
                 }
@@ -525,7 +467,6 @@
         // --- UI Rendering Functions ---
 
         const renderLogin = () => {
-            document.getElementById('navbar').classList.add('hidden');
             document.getElementById('content-area').innerHTML = `
                 <div class="flex flex-col items-center justify-center min-h-[calc(100vh-64px)] p-4">
                     <div class="bg-white p-8 sm:p-10 rounded-xl card max-w-md w-full text-center">
@@ -549,45 +490,43 @@
         };
 
         const renderDashboard = () => {
-            document.getElementById('navbar').classList.remove('hidden');
             document.getElementById('content-area').innerHTML = `
                 <div class="p-4 sm:p-6 lg:p-8">
-                    <h1 class="text-3xl font-extrabold text-gray-900 mb-6">Dashboard Overview</h1>
-                    <p class="text-secondary-gray mb-8">Welcome back, Job Seeker! Your User ID (for collaboration) is: <span class="font-mono bg-gray-200 px-2 py-1 rounded-md text-sm">${window.userId || 'Not Authenticated'}</span></p>
+                    <h1 class="text-3xl font-extrabold text-gray-900 mb-6">Employer Dashboard Overview</h1>
+                    <p class="text-secondary-gray mb-8">Welcome back! Your User ID (for collaboration) is: <span class="font-mono bg-gray-200 px-2 py-1 rounded-md text-sm">${window.userId || 'Not Authenticated'}</span></p>
 
                     <div class="grid grid-cols-1 md:grid-cols-3 gap-6">
                         <div class="bg-white p-6 rounded-xl card border-l-4 border-primary-blue">
-                            <p class="text-sm text-secondary-gray">Jobs Applied (Simulated)</p>
+                            <p class="text-sm text-secondary-gray">Applications Received (Simulated)</p>
                             <p class="text-3xl font-bold text-gray-900 mt-1">42</p>
                             <span class="text-sm text-green-600">↑ 1 New This Week</span>
                         </div>
 
-                        <div class="bg-white p-6 rounded-xl card border-l-4 border-green-600 cursor-pointer hover:bg-gray-50" onclick="navigateTo('profile')">
-                            <p class="text-sm text-secondary-gray">Profile Completion</p>
-                            <p class="text-3xl font-bold text-gray-900 mt-1">75%</p>
-                            <span class="text-sm text-primary-blue">Click to complete!</span>
+                        <div class="bg-white p-6 rounded-xl card border-l-4 border-green-600 cursor-pointer hover:bg-gray-50" onclick="navigateTo('postJob')">
+                            <p class="text-sm text-secondary-gray">New Job Postings</p>
+                            <p class="text-3xl font-bold text-gray-900 mt-1">Ready</p>
+                            <span class="text-sm text-primary-blue">Click to post!</span>
                         </div>
 
                         <div class="bg-white p-6 rounded-xl card border-l-4 border-yellow-600 cursor-pointer hover:bg-gray-50" onclick="navigateTo('jobs')">
-                            <p class="text-sm text-secondary-gray">Total Open Jobs</p>
-                            <p class="text-3xl font-bold text-gray-900 mt-1">${window.jobs.length}</p>
-                            <span class="text-sm text-yellow-600">Click to explore!</span>
+                            <p class="text-sm text-secondary-gray">Total Active Listings</p>
+                            <p class="text-3xl font-bold text-gray-900 mt-1">${window.userPostedJobs.length}</p>
+                            <span class="text-sm text-yellow-600">Click to manage!</span>
                         </div>
                     </div>
 
                     <div class="mt-10">
-                        <h2 class="text-2xl font-bold text-gray-900 mb-4">Featured Job</h2>
+                        <h2 class="text-2xl font-bold text-gray-900 mb-4">Your Most Recent Job Posting</h2>
                         <div class="bg-white p-6 rounded-xl card space-y-4">
-                            ${window.jobs.length > 0 ? `
+                            ${window.userPostedJobs.length > 0 ? `
                                 <div class="flex flex-col sm:flex-row justify-between items-start sm:items-center border-b pb-3">
                                     <div>
-                                        <p class="font-semibold text-primary-blue">${window.jobs[0].title}</p>
-                                        <p class="text-sm text-secondary-gray">${window.jobs[0].company} | ${window.jobs[0].location}</p>
+                                        <p class="font-semibold text-primary-blue">${window.userPostedJobs[0].title}</p>
+                                        <p class="text-sm text-secondary-gray">${window.userPostedJobs[0].company} | ${window.userPostedJobs[0].location}</p>
                                     </div>
-                                    <button onclick="showApplyModal('${window.jobs[0].id}', '${window.jobs[0].title}')" class="mt-2 sm:mt-0 text-white bg-primary-blue hover:bg-blue-700 py-2 px-4 rounded-lg text-sm">View & Apply</button>
+                                    <button onclick="navigateTo('jobs')" class="mt-2 sm:mt-0 text-white bg-primary-blue hover:bg-blue-700 py-2 px-4 rounded-lg text-sm">View Applicants (Simulated)</button>
                                 </div>
-                            ` : '<p class="text-center text-secondary-gray">No featured jobs available. Post one now!</p>'}
-                            
+                            ` : '<p class="text-center text-secondary-gray">No jobs posted yet. Post one now!</p>'}
                         </div>
                     </div>
                 </div>
@@ -595,7 +534,6 @@
         };
 
         const renderProfile = () => {
-            document.getElementById('navbar').classList.remove('hidden');
             document.getElementById('content-area').innerHTML = `
                 <div class="p-4 sm:p-6 lg:p-8">
                     <h1 class="text-3xl font-extrabold text-gray-900 mb-6">Profile Management</h1>
@@ -648,8 +586,8 @@
                         <p class="text-sm text-gray-500 mt-2">${job.description.substring(0, 100)}...</p>
                         <p class="text-xs text-gray-400 mt-2">Posted: ${timeAgo}</p>
                     </div>
-                    <button onclick="showApplyModal('${job.id}', '${job.title}')" class="text-white bg-indigo-600 hover:bg-indigo-700 py-2 px-5 rounded-lg shadow transition duration-150 whitespace-nowrap md:ml-6">
-                        Apply Now
+                    <button onclick="showApplyModal('${job.id}', '${job.title}', '${job.company}')" class="text-white bg-indigo-600 hover:bg-indigo-700 py-2 px-5 rounded-lg shadow transition duration-150 whitespace-nowrap md:ml-6">
+                        Manage Listing
                     </button>
                 </div>
             `;
@@ -661,21 +599,18 @@
             const salaryRange = document.getElementById('salary-filter').value;
 
             currentJobFilter = { search, location, salaryRange };
-            renderJobs(); // Re-render the job list with new filters
+            renderJobs(); 
         };
 
         const filterJobs = (jobs, filter) => {
             return jobs.filter(job => {
-                // 1. Search Filter (Title/Company)
                 const searchMatch = !filter.search || 
                                     job.title.toLowerCase().includes(filter.search) || 
                                     job.company.toLowerCase().includes(filter.search);
 
-                // 2. Location Filter
                 const locationMatch = filter.location === 'All' || 
                                       job.location === filter.location;
                                       
-                // 3. Salary Range Filter
                 const jobMinSalaryK = parseSalaryToMinK(job.salary);
                 let salaryMatch = true;
 
@@ -683,13 +618,13 @@
                     case 'All':
                         salaryMatch = true;
                         break;
-                    case 'Low': // < $70K
+                    case 'Low': 
                         salaryMatch = jobMinSalaryK < 70;
                         break;
-                    case 'Mid': // $70K - $110K
+                    case 'Mid': 
                         salaryMatch = jobMinSalaryK >= 70 && jobMinSalaryK <= 110;
                         break;
-                    case 'High': // > $110K
+                    case 'High': 
                         salaryMatch = jobMinSalaryK > 110;
                         break;
                 }
@@ -699,10 +634,11 @@
         };
 
         const renderJobs = () => {
-            document.getElementById('navbar').classList.remove('hidden');
-
-            const filteredJobs = filterJobs(window.jobs, currentJobFilter);
-            const locationOptions = ['All', ...new Set(window.jobs.map(j => j.location))].map(loc => 
+            // UPDATED: Filter only jobs posted by the current user
+            const filteredJobs = filterJobs(window.userPostedJobs, currentJobFilter);
+            
+            // UPDATED: Base options on userPostedJobs
+            const locationOptions = ['All', ...new Set(window.userPostedJobs.map(j => j.location))].map(loc => 
                 `<option value="${loc}" ${loc === currentJobFilter.location ? 'selected' : ''}>${loc}</option>`
             ).join('');
 
@@ -718,12 +654,12 @@
 
             const jobListingsHTML = filteredJobs.length > 0
                 ? filteredJobs.map(jobCardTemplate).join('')
-                : '<p class="text-center text-lg text-secondary-gray mt-10">No jobs match your current filters.</p>';
+                : `<p class="text-center text-lg text-secondary-gray mt-10">You haven't posted any jobs yet. <a href="#" onclick="navigateTo('postJob')" class="text-primary-blue hover:underline font-medium">Post your first job here!</a></p>`;
 
 
             document.getElementById('content-area').innerHTML = `
                 <div class="p-4 sm:p-6 lg:p-8">
-                    <h1 class="text-3xl font-extrabold text-gray-900 mb-6">Explore Job Listings (${filteredJobs.length} results)</h1>
+                    <h1 class="text-3xl font-extrabold text-gray-900 mb-6">Your Active Job Postings (${filteredJobs.length} results)</h1>
 
                     <div class="bg-white p-6 rounded-xl card mb-8 grid grid-cols-1 md:grid-cols-4 gap-4">
                         <div class="md:col-span-2">
@@ -752,7 +688,6 @@
         };
 
         const renderPostJob = () => {
-            document.getElementById('navbar').classList.remove('hidden');
             document.getElementById('content-area').innerHTML = `
                 <div class="p-4 sm:p-6 lg:p-8 max-w-3xl mx-auto">
                     <h1 class="text-3xl font-extrabold text-gray-900 mb-6">Post a New Job Opening</h1>
@@ -795,22 +730,21 @@
         };
 
         const renderNotifications = () => {
-            document.getElementById('navbar').classList.remove('hidden');
             document.getElementById('content-area').innerHTML = `
                 <div class="p-4 sm:p-6 lg:p-8 max-w-3xl mx-auto">
                     <h1 class="text-3xl font-extrabold text-gray-900 mb-6">Notifications & Alerts</h1>
                     <div class="space-y-4">
                         <div class="bg-white p-4 rounded-xl card border-l-4 border-primary-blue">
-                            <p class="font-semibold text-gray-900">New Job Listing Alert!</p>
-                            <p class="text-secondary-gray text-sm">A new Senior Developer role was posted in Remote today. <a href="#" onclick="navigateTo('jobs')" class="text-primary-blue hover:underline">View now</a>.</p>
+                            <p class="font-semibold text-gray-900">New Application!</p>
+                            <p class="text-secondary-gray text-sm">A new candidate applied for your Senior Developer role 5 minutes ago.</p>
                         </div>
                          <div class="bg-white p-4 rounded-xl card border-l-4 border-yellow-600">
                             <p class="font-semibold text-gray-900">Profile Incomplete</p>
-                            <p class="text-secondary-gray text-sm">Remember to add your Resume Link to apply easily. <a href="#" onclick="navigateTo('profile')" class="text-primary-blue hover:underline">Update profile</a>.</p>
+                            <p class="text-secondary-gray text-sm">Remember to update your company profile details. <a href="#" onclick="navigateTo('profile')" class="text-primary-blue hover:underline">Update profile</a>.</p>
                         </div>
                          <div class="bg-white p-4 rounded-xl card border-l-4 border-green-600">
-                            <p class="font-semibold text-gray-900">Application Status</p>
-                            <p class="text-secondary-gray text-sm">Your application for UX Designer at Design Studio has been viewed!</p>
+                            <p class="font-semibold text-gray-900">Job Status</p>
+                            <p class="text-secondary-gray text-sm">Your Marketing Manager posting is performing well with 15 views today.</p>
                         </div>
                     </div>
                 </div>
@@ -818,7 +752,6 @@
         };
 
         const renderAbout = () => {
-             document.getElementById('navbar').classList.remove('hidden');
              document.getElementById('content-area').innerHTML = `
                 <div class="p-4 sm:p-6 lg:p-8 max-w-3xl mx-auto">
                     <h1 class="text-3xl font-extrabold text-gray-900 mb-6">About JobConnect</h1>
@@ -838,7 +771,6 @@
         };
 
         const renderContact = () => {
-            document.getElementById('navbar').classList.remove('hidden');
             document.getElementById('content-area').innerHTML = `
                 <div class="p-4 sm:p-6 lg:p-8 max-w-3xl mx-auto">
                     <h1 class="text-3xl font-extrabold text-gray-900 mb-6">Contact Us</h1>
