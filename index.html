@@ -1,0 +1,794 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Job Connect: Professional Networking and Job Portal MVP</title>
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.2/css/all.min.css">
+    <script src="https://cdn.tailwindcss.com"></script>
+    <style>
+        /* Custom styles for professional look and feel */
+        body {
+            font-family: 'Inter', sans-serif;
+            background-color: #f7f9fc; /* Light background */
+        }
+        .card {
+            box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.1), 0 2px 4px -2px rgba(0, 0, 0, 0.06);
+            transition: transform 0.2s;
+        }
+        .btn-primary {
+            background-color: #1e40af; /* Darker blue */
+            color: white;
+        }
+        .btn-primary:hover {
+            background-color: #1d4ed8; /* Lighter blue on hover */
+        }
+        /* Mobile-first: Ensure main content takes up full height */
+        #app-container {
+            min-height: 100vh;
+            display: flex;
+            flex-direction: column;
+        }
+    </style>
+    <script>
+        tailwind.config = {
+            theme: {
+                extend: {
+                    colors: {
+                        'primary-blue': '#1e40af',
+                        'secondary-gray': '#6b7280',
+                    }
+                }
+            }
+        }
+    </script>
+</head>
+<body class="bg-gray-50">
+
+    <div id="app-container" class="max-w-7xl mx-auto w-full">
+
+        <header id="navbar" class="bg-white shadow-lg sticky top-0 z-10 hidden">
+            <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
+                <div class="flex justify-between items-center h-16">
+                    <div class="flex items-center">
+                        <span class="text-2xl font-bold text-primary-blue cursor-pointer" onclick="navigateTo('dashboard')">JobConnect</span>
+                    </div>
+                    <div class="flex items-center space-x-2 sm:space-x-4 text-sm sm:text-base">
+                        <button onclick="navigateTo('notifications')" class="p-2 rounded-full text-secondary-gray hover:text-primary-blue transition duration-150 relative">
+                            <svg class="h-6 w-6" fill="none" stroke="currentColor" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg">
+                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 17h5l-1.405-1.405A2.032 2.032 0 0118 14.158V11a6.002 6.002 0 00-4-5.659V5a2 2 0 10-4 0v.341C7.67 6.165 6 8.388 6 11v3.159c0 .538-.214 1.055-.595 1.436L4 17h5m6 0v1a3 3 0 11-6 0v-1m6 0H9" />
+                            </svg>
+                            <span id="notification-count-badge" class="absolute top-1 right-1 h-2 w-2 rounded-full bg-red-600 hidden"></span>
+                        </button>
+                        
+                        <button onclick="navigateTo('jobs')" class="text-secondary-gray hover:text-primary-blue transition duration-150 p-2 rounded-lg hidden sm:inline">My Job Postings</button> 
+                        <button onclick="navigateTo('profile')" class="text-secondary-gray hover:text-primary-blue transition duration-150 p-2 rounded-lg hidden sm:inline">Profile</button>
+                        <button onclick="navigateTo('about')" class="text-secondary-gray hover:text-primary-blue transition duration-150 p-2 rounded-lg hidden sm:inline">About Us</button>
+                        <button onclick="navigateTo('contact')" class="text-secondary-gray hover:text-primary-blue transition duration-150 p-2 rounded-lg hidden sm:inline">Contact Us</button>
+
+                        <button onclick="navigateTo('postJob')" class="text-white bg-indigo-600 hover:bg-indigo-700 font-semibold py-2 px-3 sm:px-4 rounded-lg shadow transition duration-150 whitespace-nowrap text-sm">Post Job</button>
+
+                        <button onclick="handleSignOut()" class="text-red-500 hover:text-red-700 transition duration-150 p-2 rounded-lg border border-red-500 hover:border-red-700 text-sm">Sign Out</button>
+                    </div>
+                </div>
+            </div>
+        </header>
+
+        <main id="content-area" class="flex-grow p-4 sm:p-8">
+        </main>
+
+        <div id="loading-overlay" class="fixed inset-0 bg-gray-900 bg-opacity-70 z-50 flex items-center justify-center hidden">
+            <div class="animate-spin rounded-full h-12 w-12 border-4 border-t-4 border-t-primary-blue border-gray-200"></div>
+            <p class="ml-4 text-white text-lg">Loading...</p>
+        </div>
+
+        <div id="apply-modal" class="fixed inset-0 bg-gray-900 bg-opacity-70 z-40 flex items-center justify-center hidden">
+            <div class="bg-white p-8 rounded-xl card max-w-lg w-full m-4">
+                <h3 id="modal-title" class="text-2xl font-semibold text-primary-blue mb-4">Confirm Application</h3>
+                <p id="apply-job-title" class="text-lg font-medium mb-4"></p>
+                <p id="apply-instruction" class="text-secondary-gray mb-6">Are you sure you want to apply for this position? We will submit your profile details and resume link.</p>
+                <div id="apply-message" class="text-green-600 font-semibold text-lg mb-4 hidden"></div>
+                <div class="flex justify-end space-x-3">
+                    <button id="cancel-btn" onclick="hideApplyModal()" class="text-secondary-gray border border-gray-300 py-2 px-5 rounded-lg shadow-md hover:bg-gray-100 transition duration-150">Cancel</button>
+                    <button id="confirm-apply-btn" onclick="submitApplication()" class="btn-primary py-2 px-5 rounded-lg shadow-md hover:shadow-lg transition duration-150">Apply</button>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <script type="module">
+        // UPDATED: Added 'where' to imports
+        import { initializeApp } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-app.js";
+        import { getAuth, signInAnonymously, signInWithEmailAndPassword, createUserWithEmailAndPassword, onAuthStateChanged, signOut } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-auth.js";
+        import { getFirestore, collection, addDoc, onSnapshot, query, setLogLevel, doc, getDoc, setDoc, where } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-firestore.js";
+
+        // Enable debug logging for Firestore
+        setLogLevel('Debug');
+
+        // Global Firebase Configuration (Mandatory Setup)
+        const appId = typeof __app_id !== 'undefined' ? __app_id : 'job-connect-app';
+        const firebaseConfig = typeof __firebase_config !== 'undefined' ? JSON.parse(__firebase_config) : {};
+        const initialAuthToken = typeof __initial_auth_token !== 'undefined' ? __initial_auth_token : null;
+
+        let app, db, auth;
+        window.userId = null;
+        let isLoggedIn = false;
+        let currentPage = 'login'; // Initial UI state
+        
+        // UPDATED: Renamed global jobs variable for clarity (tracks only jobs posted by this user)
+        window.userPostedJobs = []; 
+        window.userProfile = { name: '', title: '', resumeLink: '', summary: '' };
+        let currentJobFilter = { search: '', location: 'All', salaryRange: 'All' }; 
+        let currentJobToApply = null; // Store job details for the modal
+
+        // --- Utility Functions ---
+
+        const showLoading = (show) => {
+            document.getElementById('loading-overlay').classList.toggle('hidden', !show);
+        };
+        
+        /**
+         * Parses a salary string (e.g., "$120K+", "$80K", "Negotiable") into a minimum annual salary in thousands (K).
+         */
+        const parseSalaryToMinK = (salary) => {
+            if (!salary || salary.toLowerCase() === 'negotiable') return 0;
+            const match = salary.match(/\$(\d+)K/i); 
+            return match ? parseInt(match[1], 10) : 0;
+        };
+
+        // --- CORE NAVIGATION LOGIC ---
+        
+        const setUIState = (newState) => {
+            currentPage = newState;
+            hideApplyModal(); 
+            
+            // Check if navigation bar should be visible
+            const navbar = document.getElementById('navbar');
+            if (newState === 'login') {
+                navbar.classList.add('hidden');
+            } else {
+                navbar.classList.remove('hidden');
+            }
+            
+            switch (currentPage) {
+                case 'dashboard':
+                    renderDashboard();
+                    break;
+                case 'jobs':
+                    renderJobs();
+                    break;
+                case 'profile':
+                    renderProfile();
+                    break;
+                case 'postJob':
+                    renderPostJob();
+                    break;
+                case 'notifications':
+                    renderNotifications();
+                    break;
+                case 'about':
+                    renderAbout();
+                    break;
+                case 'contact':
+                    renderContact();
+                    break;
+                case 'login':
+                default:
+                    renderLogin();
+                    break;
+            }
+        };
+
+        window.navigateTo = (page) => {
+            if (!isLoggedIn && page !== 'login') {
+                console.warn(`Attempted to access ${page} without being logged in. Redirecting to login.`);
+                setUIState('login');
+                return;
+            }
+            setUIState(page);
+        };
+        // --- END CORE NAVIGATION LOGIC ---
+
+        // --- Core App Setup and Authentication ---
+        async function setupFirebase() {
+            try {
+                showLoading(true);
+
+                if (Object.keys(firebaseConfig).length > 0) {
+                    app = initializeApp(firebaseConfig);
+                    auth = getAuth(app);
+                    db = getFirestore(app);
+
+                    await new Promise(resolve => {
+                        const unsubscribe = onAuthStateChanged(auth, async (user) => {
+                            if (user) {
+                                window.userId = user.uid;
+                                isLoggedIn = true;
+                                // Start listening to ONLY the user's posted jobs once authenticated
+                                setupJobListener(); 
+                                await fetchUserProfile();
+                                setUIState('dashboard');
+                            } else {
+                                // Fallback to the login screen for user sign-in
+                                setUIState('login');
+                            }
+                            unsubscribe();
+                            resolve();
+                        });
+                    });
+                } else {
+                    console.warn("Firebase config not available. Running in UI simulation mode.");
+                    window.userId = "simulated-user-guest";
+                    isLoggedIn = true; 
+                    setUIState('dashboard');
+                    
+                    // Simulated data for demo mode (This data will be used as the *user's* posted jobs in this demo)
+                    window.userPostedJobs = [
+                        { id: 'job1', title: 'Senior Developer', company: 'Tech Corp', location: 'Remote', salary: '$120K+', description: 'Build scalable applications with React/Node.js.', timestamp: Date.now() - 3600000, postedBy: window.userId },
+                        { id: 'job2', title: 'UX Designer', company: 'Design Studio', location: 'NY', salary: '$80K', description: 'Design user-friendly interfaces for a new mobile app.', timestamp: Date.now() - 7200000, postedBy: window.userId },
+                        { id: 'job3', title: 'Marketing Manager', company: 'Brand Innovators', location: 'London', salary: '$95K', description: 'Lead digital marketing campaigns.', timestamp: Date.now() - 10800000, postedBy: window.userId },
+                        { id: 'job4', title: 'Junior Analyst Internship', company: 'Startup Co', location: 'Remote', salary: '$50K', description: 'Entry-level position analyzing market trends.', timestamp: Date.now() - 12800000, postedBy: window.userId }
+                    ];
+                }
+            } catch (error) {
+                console.error("Failed to initialize Firebase:", error);
+                setUIState('login');
+            } finally {
+                showLoading(false);
+            }
+        }
+
+        // --- Authentication Handlers ---
+
+        window.handleLogin = async () => {
+            const email = document.getElementById('email').value;
+            const password = document.getElementById('password').value;
+            if (!email || !password) return;
+            document.getElementById('login-error-message').classList.add('hidden');
+
+            if (!auth) {
+                isLoggedIn = true;
+                window.userId = "simulated-user-" + email.split('@')[0];
+                setUIState('dashboard');
+                return;
+            }
+
+            showLoading(true);
+            try {
+                await signInWithEmailAndPassword(auth, email, password);
+                await fetchUserProfile();
+                setUIState('dashboard'); 
+            } catch (error) {
+                if (error.code === 'auth/user-not-found' || error.code === 'auth/wrong-password') {
+                    try {
+                        await createUserWithEmailAndPassword(auth, email, password);
+                        document.getElementById('login-error-message').textContent = "Account created successfully! You are now logged in.";
+                        document.getElementById('login-error-message').classList.remove('hidden', 'text-red-500');
+                        document.getElementById('login-error-message').classList.add('text-green-600');
+                        await fetchUserProfile();
+                        setUIState('dashboard');
+                    } catch (signUpError) {
+                        document.getElementById('login-error-message').textContent = `Sign Up Failed: ${signUpError.message}`;
+                        document.getElementById('login-error-message').classList.remove('hidden', 'text-green-600');
+                        document.getElementById('login-error-message').classList.add('text-red-500');
+                    }
+                } else {
+                    document.getElementById('login-error-message').textContent = `Login Failed: ${error.message}`;
+                    document.getElementById('login-error-message').classList.remove('hidden', 'text-green-600');
+                    document.getElementById('login-error-message').classList.add('text-red-500');
+                }
+            } finally {
+                showLoading(false);
+            }
+        };
+
+        window.handleSignOut = async () => {
+            if (!auth) {
+                isLoggedIn = false;
+                window.userId = null;
+                setUIState('login');
+                return;
+            }
+            try {
+                await signOut(auth);
+                window.userId = null;
+                isLoggedIn = false;
+                setUIState('login');
+            } catch (error) {
+                console.error("Sign Out Error:", error);
+            }
+        };
+
+
+        // --- Profile Management ---
+
+        const fetchUserProfile = async () => {
+            if (!db || !window.userId) return;
+            const userDocRef = doc(db, "artifacts", appId, "users", window.userId, "profile", "details");
+            try {
+                const docSnap = await getDoc(userDocRef);
+                if (docSnap.exists()) {
+                    window.userProfile = docSnap.data();
+                } else {
+                    console.log("No profile found, using defaults.");
+                }
+            } catch (error) {
+                console.error("Error fetching profile:", error);
+            }
+        };
+
+        window.saveProfile = async () => {
+            const name = document.getElementById('p-name').value;
+            const title = document.getElementById('p-title').value;
+            const resumeLink = document.getElementById('p-resume').value;
+            const summary = document.getElementById('p-summary').value;
+
+            window.userProfile = { name, title, resumeLink, summary };
+            document.getElementById('save-message').classList.remove('hidden');
+            setTimeout(() => document.getElementById('save-message').classList.add('hidden'), 3000);
+
+            if (!db || !window.userId) return; 
+
+            showLoading(true);
+            try {
+                const userDocRef = doc(db, "artifacts", appId, "users", window.userId, "profile", "details");
+                await setDoc(userDocRef, window.userProfile, { merge: true });
+            } catch (error) {
+                console.error("Error saving profile:", error);
+            } finally {
+                showLoading(false);
+            }
+        };
+
+        // --- Job Handlers ---
+
+        window.handleJobPost = async (event) => {
+            event.preventDefault(); 
+            
+            const title = document.getElementById('job-title').value;
+            const company = document.getElementById('company-name').value;
+            const location = document.getElementById('job-location').value;
+            const salary = document.getElementById('salary-range').value || 'Negotiable';
+            const description = document.getElementById('job-description').value;
+
+            if (!title || !company || !location || !description || !window.userId) {
+                console.log("Please fill in all required job fields and ensure user is logged in.");
+                return;
+            }
+
+            const newJob = {
+                title,
+                company,
+                location,
+                salary,
+                description,
+                timestamp: Date.now(),
+                postedBy: window.userId, // CRITICAL: Ensure the user ID is added here
+            };
+
+            document.getElementById('post-message').classList.remove('hidden');
+            setTimeout(() => {
+                document.getElementById('post-message').classList.add('hidden');
+                navigateTo('jobs'); 
+            }, 1000);
+
+            if (!db || !appId) return; 
+
+            showLoading(true);
+            try {
+                const jobsCollection = collection(db, "artifacts", appId, "public", "data", "jobs");
+                await addDoc(jobsCollection, newJob);
+                event.target.reset();
+            } catch (error) {
+                console.error("Error posting job:", error);
+            } finally {
+                showLoading(false);
+            }
+        };
+        
+        window.showApplyModal = (jobId, jobTitle, jobCompany) => {
+            // Note: This modal is still geared toward job seeking, but we'll leave it in place 
+            // even though the main view is employer-focused.
+            currentJobToApply = window.userPostedJobs.find(j => j.id === jobId);
+            if (!currentJobToApply) return;
+            
+            document.getElementById('modal-title').textContent = "Simulated Application";
+            document.getElementById('apply-job-title').textContent = currentJobToApply.title + ' at ' + currentJobToApply.company;
+            document.getElementById('apply-instruction').textContent = 'This is a simulated application for the role you posted. On a real system, you would see applicant details here.';
+            document.getElementById('apply-modal').classList.remove('hidden');
+            document.getElementById('apply-message').classList.add('hidden');
+            document.getElementById('confirm-apply-btn').classList.add('hidden');
+            document.getElementById('cancel-btn').textContent = 'Close';
+        };
+
+        window.hideApplyModal = () => {
+            document.getElementById('apply-modal').classList.add('hidden');
+            currentJobToApply = null;
+        };
+
+        window.submitApplication = async () => {
+             // We are changing this to simply close the modal since the view is now employer-focused.
+             hideApplyModal();
+        };
+
+
+        // --- Firestore Listeners (UPDATED FOR USER-SPECIFIC JOBS) ---
+
+        const setupJobListener = () => {
+            if (!db || !appId || !window.userId) {
+                console.warn("Cannot set up job listener: DB or User ID is missing.");
+                return;
+            }
+
+            // Firestore path: artifacts/{appId}/public/data/jobs
+            const jobsCollection = collection(db, "artifacts", appId, "public", "data", "jobs");
+            
+            // CRITICAL: Query to filter documents where the 'postedBy' field equals the current user's ID.
+            const q = query(
+                jobsCollection, 
+                where("postedBy", "==", window.userId)
+            ); 
+
+            onSnapshot(q, (snapshot) => {
+                window.userPostedJobs = []; // Clear old list
+                snapshot.forEach((doc) => {
+                    // Add document ID and data to the global array
+                    window.userPostedJobs.push({ id: doc.id, ...doc.data() });
+                });
+                
+                // Sort by timestamp (most recent first)
+                window.userPostedJobs.sort((a, b) => b.timestamp - a.timestamp);
+                
+                // Re-render the job listings if the user is currently viewing them
+                if (currentPage === 'jobs') {
+                    renderJobs(); 
+                }
+                // Also update dashboard widgets
+                if (currentPage === 'dashboard') {
+                    renderDashboard(); 
+                }
+                console.log("Jobs posted by user updated from Firestore:", window.userPostedJobs.length);
+            }, (error) => {
+                console.error("Error listening to job collection:", error);
+                window.userPostedJobs = [];
+                if (currentPage === 'jobs') {
+                    renderJobs();
+                }
+            });
+        };
+
+
+        // --- UI Rendering Functions ---
+
+        const renderLogin = () => {
+            document.getElementById('content-area').innerHTML = `
+                <div class="flex flex-col items-center justify-center min-h-[calc(100vh-64px)] p-4">
+                    <div class="bg-white p-8 sm:p-10 rounded-xl card max-w-md w-full text-center">
+                        <svg xmlns="http://www.w3.org/2000/svg" class="h-10 w-10 mx-auto text-primary-blue" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M21 13.255A23.513 23.513 0 0112 15c-3.185 0-6.279-.661-9-1.745M16 16v1a2 2 0 002 2h4a2 2 0 002-2v-1M6 16v1a2 2 0 002 2h4a2 2 0 002-2v-1M6 6v1a2 2 0 002 2h4a2 2 0 002-2v-1M16 6v1a2 2 0 002 2h4a2 2 0 002-2v-1" />
+                        </svg>
+                        <h2 class="text-3xl font-extrabold text-gray-900 mt-4 mb-2">Welcome to JobConnect</h2>
+                        <p class="text-secondary-gray mb-8">The professional networking and job portal MVP.</p>
+
+                        <div class="space-y-4">
+                            <input id="email" type="email" value="user@example.com" placeholder="Email Address" class="w-full p-3 border border-gray-300 rounded-lg focus:ring-primary-blue focus:border-primary-blue" required>
+                            <input id="password" type="password" value="password" placeholder="Password" class="w-full p-3 border border-gray-300 rounded-lg focus:ring-primary-blue focus:border-primary-blue" required>
+                        </div>
+                        <p id="login-error-message" class="mt-4 text-sm text-red-500 hidden"></p>
+                        <button onclick="handleLogin()" class="mt-6 w-full btn-primary py-3 rounded-lg shadow-md hover:shadow-lg transition duration-150 font-semibold text-lg">
+                            Log In / Sign Up
+                        </button>
+                    </div>
+                </div>
+            `;
+        };
+
+        const renderDashboard = () => {
+            document.getElementById('content-area').innerHTML = `
+                <div class="p-4 sm:p-6 lg:p-8">
+                    <h1 class="text-3xl font-extrabold text-gray-900 mb-6">Employer Dashboard Overview</h1>
+                    <p class="text-secondary-gray mb-8">Welcome back! Your User ID (for collaboration) is: <span class="font-mono bg-gray-200 px-2 py-1 rounded-md text-sm">${window.userId || 'Not Authenticated'}</span></p>
+
+                    <div class="grid grid-cols-1 md:grid-cols-3 gap-6">
+                        <div class="bg-white p-6 rounded-xl card border-l-4 border-primary-blue">
+                            <p class="text-sm text-secondary-gray">Applications Received (Simulated)</p>
+                            <p class="text-3xl font-bold text-gray-900 mt-1">42</p>
+                            <span class="text-sm text-green-600">↑ 1 New This Week</span>
+                        </div>
+
+                        <div class="bg-white p-6 rounded-xl card border-l-4 border-green-600 cursor-pointer hover:bg-gray-50" onclick="navigateTo('postJob')">
+                            <p class="text-sm text-secondary-gray">New Job Postings</p>
+                            <p class="text-3xl font-bold text-gray-900 mt-1">Ready</p>
+                            <span class="text-sm text-primary-blue">Click to post!</span>
+                        </div>
+
+                        <div class="bg-white p-6 rounded-xl card border-l-4 border-yellow-600 cursor-pointer hover:bg-gray-50" onclick="navigateTo('jobs')">
+                            <p class="text-sm text-secondary-gray">Total Active Listings</p>
+                            <p class="text-3xl font-bold text-gray-900 mt-1">${window.userPostedJobs.length}</p>
+                            <span class="text-sm text-yellow-600">Click to manage!</span>
+                        </div>
+                    </div>
+
+                    <div class="mt-10">
+                        <h2 class="text-2xl font-bold text-gray-900 mb-4">Your Most Recent Job Posting</h2>
+                        <div class="bg-white p-6 rounded-xl card space-y-4">
+                            ${window.userPostedJobs.length > 0 ? `
+                                <div class="flex flex-col sm:flex-row justify-between items-start sm:items-center border-b pb-3">
+                                    <div>
+                                        <p class="font-semibold text-primary-blue">${window.userPostedJobs[0].title}</p>
+                                        <p class="text-sm text-secondary-gray">${window.userPostedJobs[0].company} | ${window.userPostedJobs[0].location}</p>
+                                    </div>
+                                    <button onclick="navigateTo('jobs')" class="mt-2 sm:mt-0 text-white bg-primary-blue hover:bg-blue-700 py-2 px-4 rounded-lg text-sm">View Applicants (Simulated)</button>
+                                </div>
+                            ` : '<p class="text-center text-secondary-gray">No jobs posted yet. Post one now!</p>'}
+                        </div>
+                    </div>
+                </div>
+            `;
+        };
+
+        const renderProfile = () => {
+            document.getElementById('content-area').innerHTML = `
+                <div class="p-4 sm:p-6 lg:p-8">
+                    <h1 class="text-3xl font-extrabold text-gray-900 mb-6">Profile Management</h1>
+                    <p class="text-secondary-gray mb-8">Update your professional details and provide your resume link.</p>
+
+                    <div class="bg-white p-6 rounded-xl card">
+                        <form onsubmit="event.preventDefault(); saveProfile()">
+                            <div class="grid grid-cols-1 gap-6 md:grid-cols-2">
+                                <div>
+                                    <label for="p-name" class="block text-sm font-medium text-gray-700">Full Name</label>
+                                    <input type="text" id="p-name" value="${window.userProfile.name || 'Jane Doe'}" class="mt-1 w-full p-3 border border-gray-300 rounded-lg focus:ring-primary-blue focus:border-primary-blue" required>
+                                </div>
+                                <div>
+                                    <label for="p-title" class="block text-sm font-medium text-gray-700">Current Title</label>
+                                    <input type="text" id="p-title" value="${window.userProfile.title || 'Software Engineer'}" class="mt-1 w-full p-3 border border-gray-300 rounded-lg focus:ring-primary-blue focus:border-primary-blue" required>
+                                </div>
+                                <div class="md:col-span-2">
+                                    <label for="p-resume" class="block text-sm font-medium text-gray-700">Resume Link (Add Resume)</label>
+                                    <input type="url" id="p-resume" value="${window.userProfile.resumeLink || 'https://docs.google.com/my-resume'}" placeholder="e.g., Google Drive link or personal site link" class="mt-1 w-full p-3 border border-gray-300 rounded-lg focus:ring-primary-blue focus:border-primary-blue">
+                                    <p class="mt-1 text-xs text-secondary-gray">This link will be submitted when you click 'Apply Now'.</p>
+                                </div>
+                                <div class="md:col-span-2">
+                                    <label for="p-summary" class="block text-sm font-medium text-gray-700">Professional Summary</label>
+                                    <textarea id="p-summary" rows="4" class="mt-1 w-full p-3 border border-gray-300 rounded-lg focus:ring-primary-blue focus:border-primary-blue" required>${window.userProfile.summary || 'Dynamic and driven engineer with 5 years of experience in full-stack development. Seeking new challenges in Agile environments.'}</textarea>
+                                </div>
+                            </div>
+                            <div class="mt-8 flex justify-between items-center">
+                                <p id="save-message" class="text-green-600 font-semibold hidden">Profile Saved!</p>
+                                <button type="submit" class="btn-primary py-3 px-6 rounded-lg shadow-md hover:shadow-lg transition duration-150 font-semibold">
+                                    Save Profile
+                                </button>
+                            </div>
+                        </form>
+                    </div>
+                </div>
+            `;
+        };
+        
+        // --- NEW/COMPLETED UI Rendering Functions ---
+
+        const jobCardTemplate = (job) => {
+            const timeAgo = (new Date(job.timestamp)).toLocaleDateString();
+
+            return `
+                <div class="bg-white p-6 rounded-xl card flex flex-col md:flex-row justify-between items-start md:items-center space-y-4 md:space-y-0 hover:border-l-4 hover:border-primary-blue transition duration-200">
+                    <div class="flex-1">
+                        <h3 class="text-xl font-semibold text-gray-900">${job.title}</h3>
+                        <p class="text-secondary-gray mt-1">${job.company} - ${job.location}</p>
+                        <p class="text-primary-blue font-medium mt-2">${job.salary}</p>
+                        <p class="text-sm text-gray-500 mt-2">${job.description.substring(0, 100)}...</p>
+                        <p class="text-xs text-gray-400 mt-2">Posted: ${timeAgo}</p>
+                    </div>
+                    <button onclick="showApplyModal('${job.id}', '${job.title}', '${job.company}')" class="text-white bg-indigo-600 hover:bg-indigo-700 py-2 px-5 rounded-lg shadow transition duration-150 whitespace-nowrap md:ml-6">
+                        Manage Listing
+                    </button>
+                </div>
+            `;
+        };
+
+        const applyFilters = () => {
+            const search = document.getElementById('search-input').value.toLowerCase();
+            const location = document.getElementById('location-filter').value;
+            const salaryRange = document.getElementById('salary-filter').value;
+
+            currentJobFilter = { search, location, salaryRange };
+            renderJobs(); 
+        };
+
+        const filterJobs = (jobs, filter) => {
+            return jobs.filter(job => {
+                const searchMatch = !filter.search || 
+                                    job.title.toLowerCase().includes(filter.search) || 
+                                    job.company.toLowerCase().includes(filter.search);
+
+                const locationMatch = filter.location === 'All' || 
+                                      job.location === filter.location;
+                                      
+                const jobMinSalaryK = parseSalaryToMinK(job.salary);
+                let salaryMatch = true;
+
+                switch(filter.salaryRange) {
+                    case 'All':
+                        salaryMatch = true;
+                        break;
+                    case 'Low': 
+                        salaryMatch = jobMinSalaryK < 70;
+                        break;
+                    case 'Mid': 
+                        salaryMatch = jobMinSalaryK >= 70 && jobMinSalaryK <= 110;
+                        break;
+                    case 'High': 
+                        salaryMatch = jobMinSalaryK > 110;
+                        break;
+                }
+
+                return searchMatch && locationMatch && salaryMatch;
+            });
+        };
+
+        const renderJobs = () => {
+            // UPDATED: Filter only jobs posted by the current user
+            const filteredJobs = filterJobs(window.userPostedJobs, currentJobFilter);
+            
+            // UPDATED: Base options on userPostedJobs
+            const locationOptions = ['All', ...new Set(window.userPostedJobs.map(j => j.location))].map(loc => 
+                `<option value="${loc}" ${loc === currentJobFilter.location ? 'selected' : ''}>${loc}</option>`
+            ).join('');
+
+            const salaryOptions = [
+                { value: 'All', label: 'All Salaries' },
+                { value: 'Low', label: '< $70K' },
+                { value: 'Mid', label: '$70K - $110K' },
+                { value: 'High', label: '> $110K' }
+            ].map(opt => 
+                `<option value="${opt.value}" ${opt.value === currentJobFilter.salaryRange ? 'selected' : ''}>${opt.label}</option>`
+            ).join('');
+
+
+            const jobListingsHTML = filteredJobs.length > 0
+                ? filteredJobs.map(jobCardTemplate).join('')
+                : `<p class="text-center text-lg text-secondary-gray mt-10">You haven't posted any jobs yet. <a href="#" onclick="navigateTo('postJob')" class="text-primary-blue hover:underline font-medium">Post your first job here!</a></p>`;
+
+
+            document.getElementById('content-area').innerHTML = `
+                <div class="p-4 sm:p-6 lg:p-8">
+                    <h1 class="text-3xl font-extrabold text-gray-900 mb-6">Your Active Job Postings (${filteredJobs.length} results)</h1>
+
+                    <div class="bg-white p-6 rounded-xl card mb-8 grid grid-cols-1 md:grid-cols-4 gap-4">
+                        <div class="md:col-span-2">
+                            <label for="search-input" class="block text-sm font-medium text-gray-700">Search Keywords (Title, Company)</label>
+                            <input type="text" id="search-input" value="${currentJobFilter.search}" oninput="applyFilters()" placeholder="e.g., Engineer, Designer" class="mt-1 w-full p-2 border border-gray-300 rounded-lg">
+                        </div>
+                        <div>
+                            <label for="location-filter" class="block text-sm font-medium text-gray-700">Filter by Location</label>
+                            <select id="location-filter" onchange="applyFilters()" class="mt-1 w-full p-2 border border-gray-300 rounded-lg bg-white">
+                                ${locationOptions}
+                            </select>
+                        </div>
+                         <div>
+                            <label for="salary-filter" class="block text-sm font-medium text-gray-700">Filter by Salary</label>
+                            <select id="salary-filter" onchange="applyFilters()" class="mt-1 w-full p-2 border border-gray-300 rounded-lg bg-white">
+                                ${salaryOptions}
+                            </select>
+                        </div>
+                    </div>
+
+                    <div class="space-y-6">
+                        ${jobListingsHTML}
+                    </div>
+                </div>
+            `;
+        };
+
+        const renderPostJob = () => {
+            document.getElementById('content-area').innerHTML = `
+                <div class="p-4 sm:p-6 lg:p-8 max-w-3xl mx-auto">
+                    <h1 class="text-3xl font-extrabold text-gray-900 mb-6">Post a New Job Opening</h1>
+                    <p class="text-secondary-gray mb-8">Fill in the details below to publish your job listing to the community.</p>
+
+                    <div class="bg-white p-8 rounded-xl card">
+                        <form onsubmit="handleJobPost(event)">
+                            <div class="grid grid-cols-1 gap-6 md:grid-cols-2">
+                                <div>
+                                    <label for="job-title" class="block text-sm font-medium text-gray-700">Job Title</label>
+                                    <input type="text" id="job-title" placeholder="e.g., Senior Full Stack Developer" class="mt-1 w-full p-3 border border-gray-300 rounded-lg focus:ring-primary-blue focus:border-primary-blue" required>
+                                </div>
+                                <div>
+                                    <label for="company-name" class="block text-sm font-medium text-gray-700">Company Name</label>
+                                    <input type="text" id="company-name" placeholder="e.g., Tech Innovators Inc." class="mt-1 w-full p-3 border border-gray-300 rounded-lg focus:ring-primary-blue focus:border-primary-blue" required>
+                                </div>
+                                <div>
+                                    <label for="job-location" class="block text-sm font-medium text-gray-700">Location</label>
+                                    <input type="text" id="job-location" placeholder="e.g., Remote, San Francisco" class="mt-1 w-full p-3 border border-gray-300 rounded-lg focus:ring-primary-blue focus:border-primary-blue" required>
+                                </div>
+                                <div>
+                                    <label for="salary-range" class="block text-sm font-medium text-gray-700">Salary (Annual)</label>
+                                    <input type="text" id="salary-range" placeholder="e.g., $100K - $120K or Negotiable" class="mt-1 w-full p-3 border border-gray-300 rounded-lg focus:ring-primary-blue focus:border-primary-blue">
+                                </div>
+                                <div class="md:col-span-2">
+                                    <label for="job-description" class="block text-sm font-medium text-gray-700">Job Description</label>
+                                    <textarea id="job-description" rows="6" placeholder="Provide a detailed description of the role and responsibilities." class="mt-1 w-full p-3 border border-gray-300 rounded-lg focus:ring-primary-blue focus:border-primary-blue" required></textarea>
+                                </div>
+                            </div>
+                            <div class="mt-8 flex justify-between items-center">
+                                <p id="post-message" class="text-green-600 font-semibold hidden">Job Posted! Redirecting...</p>
+                                <button type="submit" class="btn-primary py-3 px-6 rounded-lg shadow-md hover:shadow-lg transition duration-150 font-semibold">
+                                    Publish Job
+                                </button>
+                            </div>
+                        </form>
+                    </div>
+                </div>
+            `;
+        };
+
+        const renderNotifications = () => {
+            document.getElementById('content-area').innerHTML = `
+                <div class="p-4 sm:p-6 lg:p-8 max-w-3xl mx-auto">
+                    <h1 class="text-3xl font-extrabold text-gray-900 mb-6">Notifications & Alerts</h1>
+                    <div class="space-y-4">
+                        <div class="bg-white p-4 rounded-xl card border-l-4 border-primary-blue">
+                            <p class="font-semibold text-gray-900">New Application!</p>
+                            <p class="text-secondary-gray text-sm">A new candidate applied for your Senior Developer role 5 minutes ago.</p>
+                        </div>
+                         <div class="bg-white p-4 rounded-xl card border-l-4 border-yellow-600">
+                            <p class="font-semibold text-gray-900">Profile Incomplete</p>
+                            <p class="text-secondary-gray text-sm">Remember to update your company profile details. <a href="#" onclick="navigateTo('profile')" class="text-primary-blue hover:underline">Update profile</a>.</p>
+                        </div>
+                         <div class="bg-white p-4 rounded-xl card border-l-4 border-green-600">
+                            <p class="font-semibold text-gray-900">Job Status</p>
+                            <p class="text-secondary-gray text-sm">Your Marketing Manager posting is performing well with 15 views today.</p>
+                        </div>
+                    </div>
+                </div>
+            `;
+        };
+
+        const renderAbout = () => {
+             document.getElementById('content-area').innerHTML = `
+                <div class="p-4 sm:p-6 lg:p-8 max-w-3xl mx-auto">
+                    <h1 class="text-3xl font-extrabold text-gray-900 mb-6">About JobConnect</h1>
+                    <div class="bg-white p-8 rounded-xl card space-y-4">
+                        <p class="text-lg text-gray-700">JobConnect is a minimal viable product (MVP) demonstrating professional networking and job portal capabilities using Firebase as a backend.</p>
+                        <p class="text-secondary-gray">Our mission is to provide a seamless, focused platform for job seekers and employers to connect quickly and efficiently, without the clutter of traditional social networking. This application showcases core functionalities like user authentication (login/signup), profile management, job posting, and job application submission.</p>
+                        <p class="text-sm font-semibold text-primary-blue">MVP Features:</p>
+                        <ul class="list-disc list-inside text-secondary-gray ml-4">
+                            <li>Firebase Auth (Email/Password & Anonymous)</li>
+                            <li>Firestore Data Storage (Jobs, Profiles)</li>
+                            <li>Client-side UI Routing (SPA)</li>
+                            <li>Job Filtering and Search</li>
+                        </ul>
+                    </div>
+                </div>
+             `;
+        };
+
+        const renderContact = () => {
+            document.getElementById('content-area').innerHTML = `
+                <div class="p-4 sm:p-6 lg:p-8 max-w-3xl mx-auto">
+                    <h1 class="text-3xl font-extrabold text-gray-900 mb-6">Contact Us</h1>
+                    <div class="bg-white p-8 rounded-xl card space-y-4">
+                        <p class="text-lg text-gray-700">We'd love to hear from you!</p>
+                        <div class="space-y-2">
+                            <p class="font-semibold">Email:</p>
+                            <p class="text-primary-blue">support@jobconnect.com (Simulated)</p>
+                        </div>
+                        <div class="space-y-2">
+                            <p class="font-semibold">Phone:</p>
+                            <p class="text-primary-blue">+1 555-JOB-CONN (Simulated)</p>
+                        </div>
+                        <div class="space-y-2">
+                            <p class="font-semibold">Office Address:</p>
+                            <p class="text-primary-blue">123 Tech Park, Innovation City (Simulated)</p>
+                        </div>
+                    </div>
+                </div>
+            `;
+        };
+
+        // Initialize the application
+        setupFirebase();
+    </script>
+</body>
+</html>
